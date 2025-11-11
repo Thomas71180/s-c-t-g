@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supply Chain Tycoon</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .screen { display: none; }
+        .active-screen { display: block; }
+        .job-card {
+            transition: all 0.3s ease;
+        }
+        .job-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        .btn {
+            transition: all 0.2s ease;
+        }
+        .btn:hover {
+            transform: scale(1.05);
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: scale(1);
+        }
+        .log-message {
+            animation: fadeIn 0.5s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen">
+
+    <div class="container mx-auto p-4 max-w-5xl w-full">
+
+        <!-- Lobby Screen -->
+        <div id="lobby-screen" class="screen active-screen bg-white p-8 rounded-xl shadow-lg text-center">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">Supply Chain Tycoon</h1>
+            <p class="text-gray-500 mb-6">Create a new game, or enter a code from a friend below to join theirs.</p>
+            <div class="max-w-md mx-auto">
+                <p class="text-left font-semibold mb-2">Your User ID:</p>
+                <div class="bg-gray-200 p-2 rounded-md text-gray-600 mb-4 text-sm overflow-x-auto">
+                    <span id="user-id-display"></span>
+                </div>
+                <div class="space-y-4">
+                    <input type="text" id="player-name-input" placeholder="Enter Your Name" class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <button id="create-game-btn" class="btn w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg shadow-md hover:bg-blue-700" disabled>Connecting...</button>
+                    
+                    <!-- New Divider -->
+                    <div class="flex items-center" aria-hidden="true">
+                        <div class="flex-grow border-t border-gray-300"></div>
+                        <span class="flex-shrink mx-4 text-gray-500 font-semibold">OR</span>
+                        <div class="flex-grow border-t border-gray-300"></div>
+                    </div>
+
+                    <div class="flex items-center space-x-2">
+                        <!-- Modified Placeholder -->
+                        <input type="text" id="game-code-input" placeholder="Enter Code to Join or Load" class="flex-grow p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase">
+                        <button id="join-game-btn" class="btn bg-green-600 text-white font-bold py-3 px-4 rounded-lg shadow-md hover:bg-green-700" disabled>Join Game</button>
+                    </div>
+                </div>
+                 <div id="lobby-error" class="text-red-500 mt-4 h-6"></div>
+            </div>
+
+            <!-- AI Difficulty Selector (Hidden by default) -->
+            <div id="ai-difficulty-container" class="hidden mb-4">
+                <label class="block font-semibold mb-1">AI Difficulty:</label>
+                <select id="ai-difficulty-select" class="w-full p-2 border border-gray-300 rounded-lg">
+                    <option value="Cautious">Cautious</option>
+                    <option value="Balanced" selected>Balanced</option>
+                    <option value="Aggressive">Aggressive</option>
+                    <option value="Mixed">Mixed</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1">Only the game creator can set this before starting.</p>
+            </div>
+        </div>
+
+        <!-- Role Selection Screen -->
+        <div id="role-screen" class="screen">
+            <h2 class="text-3xl font-bold text-center mb-2">Choose Your Job</h2>
+            <div class="flex justify-center items-center mb-4">
+                 <p class="text-gray-600 mr-2">Share this Game Code:</p>
+                 <span id="game-code-display" class="font-bold text-xl text-blue-600 bg-blue-100 px-3 py-1 rounded-md"></span>
+            </div>
+            <div id="role-cards" class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Job cards will be inserted here by JS -->
+            </div>
+            <div class="text-center mt-6">
+                 <button id="start-game-btn" class="btn bg-indigo-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-indigo-700 text-lg">Start Game with AI Players</button>
+                 <p id="start-game-note" class="text-sm text-gray-500 mt-2">Note: Any unclaimed jobs will be filled by AI.</p>
+            </div>
+        </div>
+
+        <!-- Game Screen -->
+        <div id="game-screen" class="screen">
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <h2 id="player-role-title" class="text-3xl font-bold text-blue-700"></h2>
+                        <p class="text-gray-500">Turn #<span id="turn-counter">1</span></p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-2xl font-semibold text-green-600">$<span id="player-money">100</span></p>
+                        <p class="text-gray-500">Your Wallet</p>
+                    </div>
+
+                    <!-- New Dropdown Menu -->
+                    <div class="relative ml-4">
+                        <button id="game-menu-toggle-btn" class="btn p-2 rounded-lg bg-gray-100 hover:bg-gray-200">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                            </svg>
+                        </button>
+                        <div id="game-menu-dropdown" class="hidden absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl z-20 border border-gray-200">
+                            <button id="leave-game-btn" class="block w-full text-left px-4 py-3 text-red-600 font-semibold hover:bg-gray-100 rounded-lg">
+                                Leave Game
+                            </button>
+                        </div>
+                    </div>
+                    <!-- End New Dropdown Menu -->
+
+                </div>
+
+                <!-- Status Bar -->
+                <div id="status-bar" class="bg-gray-100 p-3 rounded-lg mb-4 text-center">
+                    <p id="turn-status" class="font-semibold text-gray-700"></p>
+                </div>
+                
+                <!-- Game Error Bar -->
+                <div id="game-error" class="text-red-500 mb-4 text-center h-6"></div>
+
+
+                <!-- Player's Action Panel -->
+                <div id="action-panel" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6 p-4 border border-gray-200 rounded-lg">
+                    <div>
+                        <label id="set-price-label" for="set-price-input" class="block font-semibold mb-1">Set Your Price:</label>
+                        <div class="flex items-center">
+                            <span class="text-xl font-bold mr-2">$</span>
+                            <input type="number" id="set-price-input" min="1" class="w-full p-2 border border-gray-300 rounded-lg text-lg">
+                        </div>
+                        <p class="text-sm text-gray-500 mt-1">You have: <span id="output-good-stock">?</span></p>
+                    </div>
+                     <div>
+                        <label id="produce-amount-label" for="produce-amount-input" class="block font-semibold mb-1">Produce Goods:</label>
+                        <div class="flex items-center">
+                            <input type="number" id="produce-amount-input" min="0" class="w-full p-2 border border-gray-300 rounded-lg text-lg">
+                            <span id="produce-item-name" class="ml-2 text-gray-600 font-medium"></span>
+                        </div>
+                        <p class="text-sm text-gray-500 mt-1">Cost: <span id="produce-cost-display"></span></p>
+                        <p class="text-sm text-gray-500 mt-1">You have: <span id="input-good-stock">?</span></p>
+                    </div>
+                    <div id="buy-goods-section">
+                        <label id="buy-amount-label" for="buy-amount-input" class="block font-semibold mb-1">Buy Goods:</label>
+                        <div class="flex items-center">
+                            <input type="number" id="buy-amount-input" min="0" class="w-full p-2 border border-gray-300 rounded-lg text-lg">
+                             <span id="buy-item-name" class="ml-2 text-gray-600 font-medium"></span>
+                        </div>
+                         <p class="text-sm text-gray-500 mt-1">Supplier's price: $<span id="supplier-price">?</span></p>
+                         <p class="text-sm text-gray-500 mt-1">Supplier has: <span id="supplier-stock">?</span></p>
+                    </div>
+                    <div class="md:col-span-3 text-center">
+                        <button id="submit-turn-btn" class="btn w-full md:w-1/2 bg-blue-600 text-white font-bold py-3 px-6 rounded-lg shadow-md hover:bg-blue-700 text-lg">Submit Turn</button>
+                    </div>
+                </div>
+
+                <!-- Game State Panels -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <!-- My Inventory -->
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <h3 class="font-bold text-lg mb-2 text-blue-800">My Inventory</h3>
+                        <div id="inventory-list" class="space-y-1"></div>
+                    </div>
+                    <!-- Market Prices -->
+                    <div class="bg-green-50 p-4 rounded-lg">
+                        <h3 class="font-bold text-lg mb-2 text-green-800">Market Prices (Last Turn)</h3>
+                        <div id="market-prices-list" class="space-y-1"></div>
+                    </div>
+                    <!-- Player Leaderboard -->
+                    <div class="bg-yellow-50 p-4 rounded-lg">
+                         <div class="flex justify-between items-center mb-2">
+                            <h3 class="font-bold text-lg text-yellow-800">Leaderboard</h3>
+                            <div class="text-sm text-gray-600">
+                                Milkman Fund: <span id="milkman-fund-display" class="font-bold text-black">$0</span>
+                            </div>
+                        </div>
+                        <div id="leaderboard-list" class="space-y-1"></div>
+                    </div>
+                </div>
+                 <!-- Game Log -->
+                <div class="mt-4 bg-gray-50 p-4 rounded-lg">
+                    <h3 class="font-bold text-lg mb-2 text-gray-800">Game Log</h3>
+                    <div id="game-log" class="h-32 overflow-y-auto text-sm space-y-1 pr-2"></div>
+                </div>
+
+                <!-- --- Add Chart.js for analytics graph --- -->
+                <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+                <!-- --- Add analytics graph container to game screen --- -->
+                <div class="mt-6 mb-4">
+                    <h3 class="font-bold text-lg mb-2 text-indigo-800">Economy Analytics</h3>
+                    <canvas id="econ-analytics-chart" height="80"></canvas>
+                </div>
+            </div>
+
+            <!-- Chat Feature -->
+            <button id="chat-toggle-btn" class="btn fixed bottom-4 right-4 bg-purple-600 text-white rounded-full h-14 w-14 flex items-center justify-center shadow-lg z-20">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM7 8H5v2h2V8zm2 0h2v2H9V8zm6 0h-2v2h2V8z" clip-rule="evenodd" />
+                </svg>
+            </button>
+            <div id="chat-window" class="hidden fixed bottom-20 right-4 w-80 h-96 bg-white rounded-xl shadow-2xl flex flex-col z-10 transition-all duration-300">
+                <div class="p-3 bg-purple-600 text-white font-bold rounded-t-xl flex justify-between items-center">
+                    <span>In-Game Chat</span>
+                </div>
+                <div id="chat-messages" class="flex-grow p-3 overflow-y-auto space-y-2"></div>
+                <form id="chat-form" class="p-2 border-t border-gray-200 flex">
+                    <input type="text" id="chat-input" class="flex-grow p-2 border rounded-l-md focus:outline-none focus:ring-2 focus:ring-purple-500" placeholder="Type a message...">
+                    <button type="submit" class="btn bg-purple-600 text-white px-4 rounded-r-md hover:bg-purple-700">Send</button>
+                </form>
+            </div>
+        </div>
+
+    </div>
+
+    <script type="module">
+        // Firebase Imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, updateDoc, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- GLOBAL VARIABLES & CONFIG ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyAbeNhS8O0qEVjI0iwrMH9C4Utb_sDlh4c",
+            authDomain: "cooperation-town.firebaseapp.com",
+            projectId: "cooperation-town",
+            storageBucket: "cooperation-town.appspot.com",
+            messagingSenderId: "155939033163",
+            appId: "1:155939033163:web:37df01055360c2cc9e3dce"
+        };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'supply-chain-tycoon';
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        let userId = null;
+        let currentGameId = null;
+        let localPlayerRole = null;
+        let gameStateUnsubscribe = null;
+        let currentGameState = null; // Cache for validation
+
+        const rolesConfig = {
+            farmer: { name: 'Farmer', icon: '🌾', produces: 'Wheat', buys: 'Delivered Sandwiches', input: 'delivery' },
+            baker: { name: 'Baker', icon: '🍞', produces: 'Bread', buys: 'Wheat', input: 'farmer' },
+            sandwichMaker: { name: 'Sandwich Maker', icon: '🥪', produces: 'Sandwiches', buys: 'Bread', input: 'baker' },
+            delivery: { name: 'Delivery', icon: '🚚', produces: 'Delivered Sandwiches', buys: 'Sandwiches', input: 'sandwichMaker' },
+        };
+
+        const screens = {
+            lobby: document.getElementById('lobby-screen'),
+            role: document.getElementById('role-screen'),
+            game: document.getElementById('game-screen'),
+        };
+        
+        // --- UI ELEMENTS ---
+        const createGameBtn = document.getElementById('create-game-btn');
+        const joinGameBtn = document.getElementById('join-game-btn');
+        const gameCodeInput = document.getElementById('game-code-input');
+        const playerNameInput = document.getElementById('player-name-input');
+        const userIdDisplay = document.getElementById('user-id-display');
+        const lobbyError = document.getElementById('lobby-error');
+        const gameError = document.getElementById('game-error');
+        const chatToggleBtn = document.getElementById('chat-toggle-btn');
+        const chatWindow = document.getElementById('chat-window');
+        const chatForm = document.getElementById('chat-form');
+        const chatInput = document.getElementById('chat-input');
+        const milkmanFundDisplay = document.getElementById('milkman-fund-display');
+        const gameMenuToggleBtn = document.getElementById('game-menu-toggle-btn');
+        const gameMenuDropdown = document.getElementById('game-menu-dropdown');
+        const leaveGameBtn = document.getElementById('leave-game-btn');
+
+        // --- INITIALIZATION ---
+        async function initialize() {
+            console.log('initialize called');
+            let authTimeout = setTimeout(() => {
+                userIdDisplay.textContent = "Still connecting... (Check your internet connection or adblock)";
+                lobbyError.textContent = "Connection is taking longer than expected. Please check your network or try disabling adblock.";
+            }, 7000);
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                clearTimeout(authTimeout);
+                userId = auth.currentUser.uid;
+                userIdDisplay.textContent = userId;
+                playerNameInput.value = `Player_${userId.substring(0, 4)}`;
+                createGameBtn.disabled = false;
+                createGameBtn.textContent = 'Create New Game';
+                joinGameBtn.disabled = false;
+                lobbyError.textContent = '';
+            } catch (error) {
+                clearTimeout(authTimeout);
+                console.error("Authentication Error:", error);
+                userIdDisplay.textContent = "Error authenticating.";
+                lobbyError.textContent = "Could not connect. Please refresh. Error: " + (error && error.message ? error.message : error);
+                createGameBtn.textContent = 'Connection Failed';
+            }
+
+            createGameBtn.addEventListener('click', async () => {
+                await createGame();
+                renderAIDifficultySelector();
+            });
+            joinGameBtn.addEventListener('click', joinGame);
+            document.getElementById('start-game-btn').addEventListener('click', startGame);
+            document.getElementById('submit-turn-btn').addEventListener('click', submitTurn);
+            chatToggleBtn.addEventListener('click', () => chatWindow.classList.toggle('hidden'));
+            chatForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                sendMessage();
+            });
+
+            // New Menu Listeners
+            gameMenuToggleBtn.addEventListener('click', () => {
+                gameMenuDropdown.classList.toggle('hidden');
+            });
+            leaveGameBtn.addEventListener('click', leaveGame);
+
+            // Close dropdown if clicking outside
+            document.addEventListener('click', (e) => {
+                if (!gameMenuToggleBtn.contains(e.target) && !gameMenuDropdown.contains(e.target)) {
+                    gameMenuDropdown.classList.add('hidden');
+                }
+            });
+        }
+
+        // --- SCREEN MANAGEMENT ---
+        function showScreen(screenName) {
+            Object.values(screens).forEach(screen => screen.classList.remove('active-screen'));
+            screens[screenName].classList.add('active-screen');
+        }
+
+        // --- GAME LOGIC ---
+        function generateGameCode() {
+            return Math.random().toString(36).substring(2, 7).toUpperCase();
+        }
+        
+        function getGameRef(gameId) {
+            return doc(db, `artifacts/${appId}/public/data/games`, gameId);
+        }
+
+        async function createGame() {
+            const gameId = generateGameCode();
+            const gameRef = getGameRef(gameId);
+            const initialGameState = {
+                gameId: gameId,
+                turn: 1,
+                status: "waiting_for_players",
+                readyPlayers: [],
+                log: [`Game ${gameId} created. Waiting for players to join.`],
+                chatMessages: [],
+                milkmanFund: 0,
+                creatorId: userId,
+                players: {
+                    farmer: { playerId: null, playerName: "Farmer", isAI: false, money: 100, inventory: { 'Delivered Sandwiches': 4 }, price: 10, buyOrder: { quantity: 0 }, productionOrder: { quantity: 0 } },
+                    baker: { playerId: null, playerName: "Baker", isAI: false, money: 100, inventory: { Wheat: 10 }, price: 15, buyOrder: { quantity: 0 }, productionOrder: { quantity: 0 } },
+                    sandwichMaker: { playerId: null, playerName: "Sandwich Maker", isAI: false, money: 100, inventory: { Bread: 6 }, price: 30, buyOrder: { quantity: 0 }, productionOrder: { quantity: 0 } },
+                    delivery: { playerId: null, playerName: "Delivery", isAI: false, money: 100, inventory: { Sandwiches: 20 }, price: 50, buyOrder: { quantity: 0 }, productionOrder: { quantity: 0 } },
+                }
+            };
+            await setDoc(gameRef, initialGameState);
+            await connectToGame(gameId);
+        }
+
+        async function joinGame() {
+            const gameId = gameCodeInput.value.toUpperCase();
+            if (!gameId) {
+                lobbyError.textContent = "Please enter a game code.";
+                return;
+            }
+            const gameRef = getGameRef(gameId);
+            const gameSnap = await getDoc(gameRef);
+
+            if (gameSnap.exists()) {
+                await connectToGame(gameId);
+            } else {
+                lobbyError.textContent = "Game not found.";
+            }
+        }
+
+        function leaveGame() {
+            if (gameStateUnsubscribe) {
+                gameStateUnsubscribe(); // Stop listening to game updates
+                gameStateUnsubscribe = null;
+            }
+            currentGameId = null;
+            localPlayerRole = null;
+            currentGameState = null;
+            
+            // Manually reset UI instead of reloading
+            showScreen('lobby');
+            
+            // Clear any game-specific UI elements that might persist
+            document.getElementById('game-code-input').value = '';
+            lobbyError.textContent = '';
+            gameError.textContent = '';
+            gameMenuDropdown.classList.add('hidden'); // Ensure menu is hidden
+        }
+
+        async function connectToGame(gameId) {
+            console.log('connectToGame called with gameId:', gameId);
+            currentGameId = gameId;
+            if (gameStateUnsubscribe) gameStateUnsubscribe();
+            
+            gameStateUnsubscribe = onSnapshot(getGameRef(gameId), (doc) => {
+                if (doc.exists()) {
+                    currentGameState = doc.data(); // Cache state
+                    updateUI(currentGameState);
+                } else {
+                    // Game was deleted or something went wrong
+                    console.warn("Game session ended or could not be found.");
+                    if(document.getElementById('game-screen').classList.contains('active-screen')) {
+                        window.location.reload();
+                    }
+                }
+            });
+        }
+        
+        async function claimRole(role) {
+            const gameRef = getGameRef(currentGameId);
+            const playerName = playerNameInput.value.trim() || `Player_${userId.substring(0, 4)}`;
+
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const gameDoc = await transaction.get(gameRef);
+                    if (!gameDoc.exists()) throw "Game does not exist!";
+                    
+                    const gameState = gameDoc.data();
+                    const playerInRole = gameState.players[role].playerId;
+
+                    if (playerInRole === userId) { // Un-claim role
+                         gameState.players[role].playerId = null;
+                         gameState.players[role].playerName = rolesConfig[role].name; // Reset name
+                         localPlayerRole = null;
+                    } else if (!playerInRole) { // Claim role
+                        Object.keys(gameState.players).forEach(r => {
+                            if (gameState.players[r].playerId === userId) {
+                                gameState.players[r].playerId = null;
+                                gameState.players[r].playerName = rolesConfig[r].name; // Reset old role name
+                            }
+                        });
+                        gameState.players[role].playerId = userId;
+                        gameState.players[role].playerName = playerName; // Set new name
+                        localPlayerRole = role;
+                    } else {
+                        throw new Error("Role already taken!");
+                    }
+                    transaction.update(gameRef, { players: gameState.players });
+                });
+            } catch (error) {
+                console.error("Failed to claim role:", error);
+            }
+        }
+
+        async function startGame() {
+            const gameRef = getGameRef(currentGameId);
+            const gameDoc = await getDoc(gameRef);
+            if (!gameDoc.exists()) return;
+            let gameState = gameDoc.data();
+            let playersUpdated = false;
+            // Only fill unclaimed roles with AI
+            Object.keys(gameState.players).forEach(role => {
+                if (!gameState.players[role].playerId) {
+                    gameState.players[role].isAI = true;
+                    gameState.players[role].playerId = `AI-${role}`;
+                    gameState.players[role].playerName = rolesConfig[role].name + ' Bot';
+                    playersUpdated = true;
+                } else {
+                    gameState.players[role].isAI = false;
+                }
+            });
+            await updateDoc(gameRef, {
+                players: gameState.players,
+                status: 'playing',
+                log: [...gameState.log, playersUpdated ? `Game started! AI has filled empty slots.` : "Game started!"]
+            });
+        }
+
+        function showGameError(message) {
+            gameError.textContent = message;
+            setTimeout(() => { gameError.textContent = ''; }, 3000);
+        }
+
+        async function submitTurn() {
+            if (!currentGameState || !localPlayerRole) return;
+
+            const price = parseInt(document.getElementById('set-price-input').value) || 0;
+            const produceAmount = parseInt(document.getElementById('produce-amount-input').value) || 0;
+            const buyAmount = parseInt(document.getElementById('buy-amount-input').value) || 0;
+
+            const player = currentGameState.players[localPlayerRole];
+            const playerConfig = rolesConfig[localPlayerRole];
+
+            // --- Client-side Validation ---
+            if (price <= 0) {
+                showGameError("Please set a valid price (greater than 0).");
+                return;
+            }
+
+            // 1. Check production cost
+            const inputGood = playerConfig.buys;
+            const inputGoodStock = player.inventory[inputGood] || 0;
+            let productionCost = 0;
+            let maxOutput = Infinity;
+            if (produceAmount > 0) {
+                if (localPlayerRole === 'farmer') {
+                    productionCost = Math.ceil(produceAmount / 10);
+                    maxOutput = inputGoodStock * 10;
+                } else if (localPlayerRole === 'baker') {
+                    productionCost = Math.ceil(produceAmount * 2);
+                    maxOutput = Math.floor(inputGoodStock / 2);
+                } else if (localPlayerRole === 'sandwichMaker') {
+                    productionCost = Math.ceil(produceAmount / 8);
+                    maxOutput = inputGoodStock * 8;
+                } else if (localPlayerRole === 'delivery') {
+                    productionCost = Math.ceil(produceAmount * 10);
+                    maxOutput = Math.floor(inputGoodStock / 10);
+                } else {
+                    productionCost = produceAmount;
+                }
+                if (produceAmount > maxOutput) {
+                    showGameError(`Not enough ${inputGood} to produce ${produceAmount} ${playerConfig.produces}. Max possible: ${maxOutput}`);
+                    return;
+                }
+                if (productionCost > inputGoodStock) {
+                    showGameError(`Not enough ${inputGood} to produce ${produceAmount} ${playerConfig.produces}.`);
+                    return;
+                }
+            }
+
+            // 2. Check purchase cost
+            if (buyAmount > 0) {
+                const supplier = currentGameState.players[playerConfig.input];
+                const supplierPrice = supplier.price || 0;
+                const supplierStock = supplier.inventory[playerConfig.buys] || 0;
+                
+                if (buyAmount * supplierPrice > player.money) {
+                    showGameError(`Not enough money to buy ${buyAmount} ${playerConfig.buys}.`);
+                    return;
+                }
+                if (buyAmount > supplierStock) {
+                    showGameError(`Supplier does not have ${buyAmount} ${playerConfig.buys} in stock.`);
+                    return;
+                }
+            }
+            // --- End Validation ---
+
+            document.getElementById('submit-turn-btn').disabled = true;
+            document.getElementById('turn-status').textContent = 'Your turn is submitted. Waiting for others...';
+            gameError.textContent = ''; // Clear errors
+
+            const gameRef = getGameRef(currentGameId);
+            
+            const newReadyPlayers = [...new Set([...(await getDoc(gameRef)).data().readyPlayers, localPlayerRole])];
+            
+            await updateDoc(gameRef, {
+                [`players.${localPlayerRole}.price`]: price,
+                [`players.${localPlayerRole}.buyOrder`]: { quantity: buyAmount },
+                [`players.${localPlayerRole}.productionOrder`]: { quantity: produceAmount },
+                readyPlayers: newReadyPlayers
+            });
+            
+            runAITurnsIfNeeded(getGameRef(currentGameId));
+        }
+
+        async function runAITurnsIfNeeded(gameRef) {
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const gameDoc = await transaction.get(gameRef);
+                    if (!gameDoc.exists()) throw "Game does not exist!";
+                    const gameState = gameDoc.data();
+                    let updated = false;
+                    // --- Smarter AI Logic: Compete, analyze market, act more often ---
+                    // Find lowest money player
+                    let lowestMoney = Infinity;
+                    let lowestRole = null;
+                    for (const role in gameState.players) {
+                        const p = gameState.players[role];
+                        if (p.money < lowestMoney) {
+                            lowestMoney = p.money;
+                            lowestRole = role;
+                        }
+                    }
+                    // Precompute market prices for each good
+                    const marketPrices = {};
+                    Object.keys(rolesConfig).forEach(role => {
+                        const good = rolesConfig[role].produces;
+                        marketPrices[good] = [];
+                    });
+                    Object.values(gameState.players).forEach(p => {
+                        const role = Object.keys(gameState.players).find(key => gameState.players[key] === p);
+                        if (role) {
+                            const good = rolesConfig[role].produces;
+                            if (typeof p.price === 'number' && p.price > 0) {
+                                marketPrices[good].push(p.price);
+                            }
+                        }
+                    });
+                    for (const role in gameState.players) {
+                        const player = gameState.players[role];
+                        if (player.isAI && !gameState.readyPlayers.includes(role)) {
+                            const config = rolesConfig[role];
+                            const supplier = gameState.players[config.input];
+                            const supplierPrice = supplier ? supplier.price : 1;
+                            const supplierStock = supplier ? (supplier.inventory[config.buys] || 0) : Infinity;
+                            // --- Market analysis for price ---
+                            let avgMarketPrice = 0;
+                            const myGood = config.produces;
+                            if (marketPrices[myGood] && marketPrices[myGood].length > 0) {
+                                avgMarketPrice = marketPrices[myGood].reduce((a,b) => a+b,0) / marketPrices[myGood].length;
+                            } else {
+                                avgMarketPrice = supplierPrice * 1.5;
+                            }
+                            // --- Cost-based minimum price logic ---
+                            let costPerUnit = 1;
+                            if (role === 'sandwichMaker') {
+                                costPerUnit = (supplierPrice || 1) / 8;
+                            } else if (role === 'baker') {
+                                costPerUnit = (supplierPrice || 1) * 2;
+                            } else if (role === 'delivery') {
+                                costPerUnit = (supplierPrice || 1) * 10;
+                            } else if (role === 'farmer') {
+                                costPerUnit = (supplierPrice || 1) / 10;
+                            }
+                            // Add a profit margin (10-30%)
+                            let minPrice = Math.ceil(costPerUnit * (1.15 + Math.random() * 0.15));
+                            // Set price just below average, but not too low
+                            let price = Math.max(minPrice, Math.floor(avgMarketPrice * (0.92 + Math.random()*0.08)));
+                            // --- Clamp AI price to reasonable range ---
+                            let minReasonable = Math.max(1, Math.floor(avgMarketPrice * 0.5));
+                            let maxReasonable = Math.max(minPrice, Math.ceil(avgMarketPrice * 2));
+                            price = Math.max(minReasonable, Math.min(price, maxReasonable));
+                            // If AI is low on stock, raise price a bit
+                            if ((player.inventory[myGood] || 0) < 3) {
+                                price = Math.max(price, Math.floor(avgMarketPrice * 1.1));
+                            }
+                            // If AI is overstocked, lower price
+                            if ((player.inventory[myGood] || 0) > 10) {
+                                price = Math.floor(price * 0.85);
+                            }
+                            // If AI is behind in money, be more aggressive
+                            let buyBudgetPercent = 0.8;
+                            let targetInputStock = 10;
+                            if (player.money < 50 || player.money < Math.max(...Object.values(gameState.players).map(p=>p.money))) {
+                                price = Math.floor(price * 0.90);
+                                buyBudgetPercent = 1.0;
+                                targetInputStock = 20;
+                            }
+                            // Sudden generosity if someone is going bankrupt
+                            let generosity = false;
+                            if (lowestMoney < 10 && player.money > 50 && role !== lowestRole && Math.random() < 0.3) {
+                                price = Math.max(1, Math.floor(price * 0.7));
+                                buyBudgetPercent = 0.5;
+                                generosity = true;
+                            }
+                            // Sudden greed
+                            if (Math.random() < 0.10) {
+                                price = Math.max(minPrice, Math.floor(price * 1.5));
+                                buyBudgetPercent = 1.0;
+                                targetInputStock = 20;
+                            }
+                            // Clamp again after all logic
+                            price = Math.max(minReasonable, Math.min(price, maxReasonable));
+                            player.price = price;
+                            // --- Production: try to use as much as possible ---
+                            let productionAmount = 0;
+                            const inputStock = player.inventory[config.buys] || 0;
+                            if (inputStock > 0) {
+                                if (role === 'farmer') {
+                                    productionAmount = inputStock * 10;
+                                } else if (role === 'baker') {
+                                    productionAmount = Math.floor(inputStock / 2);
+                                } else if (role === 'sandwichMaker') {
+                                    productionAmount = inputStock * 8;
+                                } else if (role === 'delivery') {
+                                    productionAmount = Math.floor(inputStock / 10);
+                                } else {
+                                    productionAmount = inputStock;
+                                }
+                            }
+                            player.productionOrder.quantity = productionAmount;
+                            // --- Purchase: try to buy as much as possible within budget ---
+                            const budget = player.money * buyBudgetPercent;
+                            const affordableQuantity = supplierPrice > 0 ? Math.floor(budget / supplierPrice) : 0;
+                            let neededQuantity = targetInputStock - (player.inventory[config.buys] || 0);
+                            if (neededQuantity < 0) neededQuantity = 0;
+                            let buyAmount = Math.min(affordableQuantity, neededQuantity, supplierStock);
+                            if (role === 'farmer') {
+                                const farmerNeeded = Math.max(0, 2 - (player.inventory[config.buys] || 0));
+                                buyAmount = Math.min(affordableQuantity, farmerNeeded, supplierStock);
+                            }
+                            // Be more aggressive if low on stock
+                            if ((player.inventory[config.buys] || 0) < 2 && affordableQuantity > 0) {
+                                buyAmount = Math.max(buyAmount, 1);
+                            }
+                            player.buyOrder.quantity = buyAmount;
+                            // Finalize
+                            gameState.readyPlayers.push(role);
+                            let aiMsg = `${player.playerName} has submitted their turn.`;
+                            if (generosity) aiMsg += ' (AI is being generous!)';
+                            gameState.log.push(aiMsg);
+                            updated = true;
+                        }
+                    }
+                    if(updated) {
+                        transaction.update(gameRef, {
+                            players: gameState.players,
+                            readyPlayers: gameState.readyPlayers,
+                            log: gameState.log,
+                        });
+                    }
+                });
+            } catch (error) {
+                console.error("AI turn error:", error);
+            }
+        }
+        
+        async function processTurn(gameState) {
+            console.log('processTurn called, turn:', gameState.turn);
+            const newLog = [...gameState.log, `Processing Turn #${gameState.turn}...`];
+            const players = JSON.parse(JSON.stringify(gameState.players));
+            let newMilkmanFund = gameState.milkmanFund || 0;
+
+            // --- PHASE 1: Production ---
+            const productionOrder = ['farmer', 'baker', 'sandwichMaker', 'delivery'];
+            for (const role of productionOrder) {
+                const producer = players[role];
+                const config = rolesConfig[role];
+                const productionAmount = producer.productionOrder.quantity;
+
+                if (productionAmount <= 0) continue;
+
+                const inputGood = config.buys;
+                const producedGood = config.produces;
+                
+                let cost = 0;
+                let outputAmount = productionAmount;
+                if (role === 'farmer') {
+                    cost = Math.ceil(productionAmount / 10);
+                } else if (role === 'baker') {
+                    cost = Math.ceil(productionAmount * 2);
+                    outputAmount = Math.floor(productionAmount);
+                } else if (role === 'sandwichMaker') {
+                    cost = Math.ceil(productionAmount / 8);
+                    outputAmount = Math.floor(productionAmount);
+                } else if (role === 'delivery') {
+                    cost = Math.ceil(productionAmount * 10);
+                    outputAmount = Math.floor(productionAmount);
+                }
+                if ((producer.inventory[inputGood] || 0) >= cost) {
+                    producer.inventory[inputGood] -= cost;
+                    producer.inventory[producedGood] = (producer.inventory[producedGood] || 0) + outputAmount;
+                    if (role === 'farmer') {
+                        newLog.push(`${producer.playerName} used ${cost} ${inputGood} and produced ${productionAmount} ${producedGood}.`);
+                    } else {
+                        newLog.push(`${producer.playerName} turned ${cost} ${inputGood} into ${producedGood}.`);
+                    }
+                } else {
+                    newLog.push(`${producer.playerName} failed to produce ${producedGood} (not enough ${inputGood}).`);
+                }
+            }
+
+            // --- PHASE 2: Sales ---
+            const salesOrder = ['baker', 'sandwichMaker', 'delivery', 'farmer'];
+            for (const sellerRole of salesOrder) {
+                const seller = players[sellerRole];
+                const sellerConfig = rolesConfig[sellerRole];
+                const itemToSell = sellerConfig.produces;
+                const buyerRole = Object.keys(rolesConfig).find(key => rolesConfig[key].buys === itemToSell);
+                if (buyerRole) {
+                    const buyer = players[buyerRole];
+                    const stock = seller.inventory[itemToSell] || 0;
+                    const demand = buyer.buyOrder.quantity;
+                    const price = seller.price;
+                    if (price <= 0) continue;
+                    // Prevent negative money: can only buy what you can afford
+                    const canAfford = Math.max(0, Math.floor(buyer.money / price));
+                    const quantityToTrade = Math.min(stock, demand, canAfford);
+                    if (quantityToTrade > 0) {
+                        seller.money += quantityToTrade * price;
+                        seller.inventory[itemToSell] -= quantityToTrade;
+                        buyer.money -= quantityToTrade * price;
+                        buyer.inventory[itemToSell] = (buyer.inventory[itemToSell] || 0) + quantityToTrade;
+                        newLog.push(`${buyer.playerName} bought ${quantityToTrade} ${itemToSell} from ${seller.playerName} for $${quantityToTrade * price}.`);
+                    } else if (demand > 0) {
+                        newLog.push(`${buyer.playerName} could not buy ${itemToSell} from ${seller.playerName} (check funds/stock).`);
+                    }
+                }
+            }
+            
+            // --- PHASE 3: Milkman Fund ---
+            newLog.push(`Everyone paid $5 to the Milkman.`);
+            for (const role of Object.keys(players)) {
+                // Only pay if you have enough money
+                if (players[role].money >= 5) {
+                    players[role].money -= 5;
+                    newMilkmanFund += 5;
+                }
+            }
+
+            const milkmanChance = 0.05; // 5% chance per turn
+            if (Math.random() < milkmanChance && newMilkmanFund > 0) {
+                const playerRoles = Object.keys(players);
+                const luckyRole = playerRoles[Math.floor(Math.random() * playerRoles.length)];
+                
+                players[luckyRole].money += newMilkmanFund;
+                newLog.push(`The Milkman has arrived! ${players[luckyRole].playerName} received the entire fund of $${newMilkmanFund}!`);
+                newMilkmanFund = 0; // Reset fund
+            }
+
+            // --- GAME END CHECK ---
+            const winner = Object.values(players).find(p => p.money >= 1000);
+            if (winner) {
+                newLog.push(`🎉 ${winner.playerName} has reached $1000 and wins the game! 🎉`);
+                await updateDoc(getGameRef(gameState.gameId), {
+                    players: players,
+                    turn: gameState.turn + 1,
+                    readyPlayers: [],
+                    log: newLog,
+                    milkmanFund: newMilkmanFund,
+                    status: 'ended',
+                    winner: winner.playerName
+                });
+                return;
+            }
+
+            // --- Update Firestore ---
+            await updateDoc(getGameRef(gameState.gameId), {
+                players: players,
+                turn: gameState.turn + 1,
+                readyPlayers: [],
+                log: newLog,
+                milkmanFund: newMilkmanFund
+            });
+        }
+
+        async function sendMessage() {
+            const text = chatInput.value.trim();
+            if (!text || !currentGameId || !localPlayerRole) return;
+
+            chatInput.value = '';
+            const gameRef = getGameRef(currentGameId);
+            
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const gameDoc = await transaction.get(gameRef);
+                    if (!gameDoc.exists()) throw "Game not found!";
+
+                    const gameState = gameDoc.data();
+                    const player = gameState.players[localPlayerRole];
+
+                    const newMessage = {
+                        userId: userId,
+                        playerName: player.playerName, // Use the stored player name
+                        text: text,
+                        timestamp: new Date().toISOString()
+                    };
+                    
+                    const newMessages = [...(gameState.chatMessages || []), newMessage];
+                    // Limit chat history to prevent doc size issues
+                    if (newMessages.length > 50) {
+                        newMessages.shift();
+                    }
+
+                    transaction.update(gameRef, { chatMessages: newMessages });
+                });
+            } catch (error) {
+                console.error("Error sending message:", error);
+            }
+        }
+
+
+        // --- UI UPDATING ---
+        function updateUI(gameState) {
+            console.log('updateUI called, status:', gameState.status, 'readyPlayers:', gameState.readyPlayers);
+            if (gameState.status === 'playing' && gameState.readyPlayers.length === 4) {
+                 processTurn(gameState);
+                 return; 
+            }
+            
+            if (gameState.status === 'waiting_for_players') {
+                showScreen('role');
+                renderRoleScreen(gameState);
+            } else if (gameState.status === 'playing') {
+                showScreen('game');
+                renderGameScreen(gameState);
+            } else if (gameState.status === 'ended') {
+                showScreen('game');
+                renderGameScreen(gameState, true);
+            } else {
+                showScreen('lobby');
+            }
+        }
+        
+        function renderRoleScreen(gameState) {
+            document.getElementById('game-code-display').textContent = gameState.gameId;
+            const roleCardsContainer = document.getElementById('role-cards');
+            roleCardsContainer.innerHTML = '';
+            
+            Object.keys(rolesConfig).forEach(role => {
+                const config = rolesConfig[role];
+                const player = gameState.players[role];
+                const isTaken = player.playerId && player.playerId !== userId;
+                const isMe = player.playerId === userId;
+
+                const card = document.createElement('div');
+                card.className = `job-card p-6 rounded-lg border-4 cursor-pointer ${
+                    isMe ? 'border-green-500 bg-green-50' : 
+                    isTaken ? 'border-gray-300 bg-gray-100 opacity-60' : 
+                    'border-gray-200 bg-white hover:border-blue-500'
+                }`;
+                card.innerHTML = `
+                    <div class="flex items-center">
+                        <span class="text-5xl mr-4">${config.icon}</span>
+                        <div>
+                            <h3 class="text-2xl font-bold">${config.name}</h3>
+                            <p class="text-gray-500">Produces: ${config.produces}</p>
+                            <div class="font-semibold text-lg mt-2">${
+                                isMe ? `<span class="text-green-600">This is You (${player.playerName})</span>` : 
+                                isTaken ? `<span class="text-gray-600">Taken by ${player.playerName}</span>` :
+                                '<span class="text-blue-600">Available</span>'
+                            }</div>
+                        </div>
+                    </div>
+                `;
+                if (!isTaken) {
+                    card.onclick = () => claimRole(role);
+                }
+                roleCardsContainer.appendChild(card);
+            });
+
+            const hasPlayer = Object.values(gameState.players).some(p => p.playerId === userId);
+            document.getElementById('start-game-btn').style.display = hasPlayer ? 'inline-block' : 'none';
+            document.getElementById('start-game-note').style.display = hasPlayer ? 'block' : 'none';
+        }
+        
+        function renderGameScreen(gameState, isEnded = false) {
+            console.log('renderGameScreen called');
+            if (!localPlayerRole) {
+                localPlayerRole = Object.keys(gameState.players).find(r => gameState.players[r].playerId === userId);
+                if (!localPlayerRole) {
+                    console.warn("Could not find player role. Returning to lobby.");
+                    window.location.reload();
+                    return;
+                }
+            }
+            
+            const player = gameState.players[localPlayerRole];
+            const playerConfig = rolesConfig[localPlayerRole];
+
+            // Header
+            document.getElementById('player-role-title').textContent = `${playerConfig.name} (${player.playerName})`;
+            document.getElementById('turn-counter').textContent = gameState.turn;
+            document.getElementById('player-money').textContent = player.money.toLocaleString();
+
+            // Status Bar
+            const isTurnSubmitted = gameState.readyPlayers.includes(localPlayerRole);
+            const waitingFor = Object.keys(gameState.players).filter(p => !gameState.readyPlayers.includes(p));
+            const turnStatusEl = document.getElementById('turn-status');
+            if (waitingFor.length === 0 && gameState.readyPlayers.length > 0) {
+                turnStatusEl.textContent = 'Processing turn...';
+            } else if (isTurnSubmitted) {
+                turnStatusEl.textContent = `Waiting for: ${waitingFor.map(r => gameState.players[r].playerName).join(', ')}`;
+            } else {
+                turnStatusEl.textContent = `Your turn! Please submit your actions.`;
+            }
+
+            // Action Panel
+            document.getElementById('submit-turn-btn').disabled = isTurnSubmitted;
+            document.getElementById('set-price-input').disabled = isTurnSubmitted;
+            document.getElementById('produce-amount-input').disabled = isTurnSubmitted;
+            document.getElementById('buy-amount-input').disabled = isTurnSubmitted;
+            
+            document.getElementById('set-price-label').textContent = `Set Price for Your ${playerConfig.produces}:`;
+            if(!isTurnSubmitted) document.getElementById('set-price-input').value = player.price;
+            const outputGoodName = playerConfig.produces;
+            const outputGoodStock = player.inventory[outputGoodName] || 0;
+            document.getElementById('output-good-stock').textContent = `${outputGoodStock} ${outputGoodName}`;
+
+            
+            document.getElementById('produce-item-name').textContent = playerConfig.produces;
+            if(!isTurnSubmitted) document.getElementById('produce-amount-input').value = player.productionOrder.quantity;
+            // REVERTED: 10:1 display
+            let costDisplay = '1 ' + playerConfig.buys + ' per unit';
+            if (localPlayerRole === 'farmer') {
+                costDisplay = '1 ' + playerConfig.buys + ' per 7 units';
+            } else if (localPlayerRole === 'sandwichMaker') {
+                costDisplay = '1 ' + playerConfig.buys + ' per 8 units';
+            } else if (localPlayerRole === 'delivery') {
+                costDisplay = '10 ' + playerConfig.buys + ' per unit';
+            } else if (localPlayerRole === 'baker') {
+                costDisplay = '2 ' + playerConfig.buys + ' per unit';
+            }
+            document.getElementById('produce-cost-display').textContent = costDisplay;
+            
+            const inputGoodName = playerConfig.buys;
+            const inputGoodStock = player.inventory[inputGoodName] || 0;
+            document.getElementById('input-good-stock').textContent = `${inputGoodStock} ${inputGoodName}`;
+
+
+            const buySection = document.getElementById('buy-goods-section');
+            if (playerConfig.buys) {
+                buySection.style.display = 'block';
+                document.getElementById('buy-amount-label').textContent = `Buy ${playerConfig.buys}:`;
+                if(!isTurnSubmitted) document.getElementById('buy-amount-input').value = player.buyOrder.quantity;
+                document.getElementById('buy-item-name').textContent = playerConfig.buys;
+                const supplier = gameState.players[playerConfig.input];
+                document.getElementById('supplier-price').textContent = supplier.price;
+                document.getElementById('supplier-stock').textContent = `${supplier.inventory[playerConfig.buys] || 0} units`;
+            } else {
+                buySection.style.display = 'none';
+            }
+
+            // Inventory List
+            const inventoryList = document.getElementById('inventory-list');
+            inventoryList.innerHTML = '';
+            if (Object.keys(player.inventory).length > 0 && Object.values(player.inventory).some(q => q > 0) ) {
+                for (const [item, quantity] of Object.entries(player.inventory)) {
+                    if (quantity > 0) {
+                       inventoryList.innerHTML += `<p>${item}: <span class="font-semibold">${quantity.toLocaleString()}</span></p>`;
+                    }
+                }
+            } else {
+                inventoryList.innerHTML = '<p class="text-gray-500">Empty</p>';
+            }
+
+            // Market Prices
+            const marketPricesList = document.getElementById('market-prices-list');
+            marketPricesList.innerHTML = '';
+            Object.values(gameState.players).forEach(p => {
+                const role = Object.keys(gameState.players).find(key => gameState.players[key] === p);
+                const config = rolesConfig[role];
+                 marketPricesList.innerHTML += `<p>${config.produces}: <span class="font-semibold">$${p.price}</span></g>`;
+            });
+
+            // Leaderboard
+            milkmanFundDisplay.textContent = `$${gameState.milkmanFund.toLocaleString()}`;
+            const leaderboardList = document.getElementById('leaderboard-list');
+            leaderboardList.innerHTML = '';
+            const sortedPlayers = Object.values(gameState.players).sort((a,b) => b.money - a.money);
+            sortedPlayers.forEach(p => {
+                const isUser = p.playerId === userId;
+                leaderboardList.innerHTML += `<p class="${isUser ? 'font-bold' : ''}">${p.playerName}: <span class="font-semibold text-green-700">$${p.money.toLocaleString()}</span></p>`;
+            });
+
+            // Game Log
+            const gameLog = document.getElementById('game-log');
+            gameLog.innerHTML = gameState.log.slice().reverse().map(msg => `<div class="log-message">${msg}</div>`).join('');
+            
+            renderChat(gameState);
+            updateEconAnalytics(gameState);
+
+            // If game ended, show winner and disable actions
+            if (isEnded || gameState.status === 'ended') {
+                document.getElementById('turn-status').textContent = `Game Over! Winner: ${gameState.winner || 'Unknown'}`;
+                document.getElementById('submit-turn-btn').disabled = true;
+                document.getElementById('set-price-input').disabled = true;
+                document.getElementById('produce-amount-input').disabled = true;
+                document.getElementById('buy-amount-input').disabled = true;
+            }
+        }
+
+        // --- CHAT RENDERING ---
+        function renderChat(gameState) {
+            const chatMessagesDiv = document.getElementById('chat-messages');
+            chatMessagesDiv.innerHTML = '';
+            if (gameState.chatMessages && gameState.chatMessages.length > 0) {
+                gameState.chatMessages.forEach(msg => {
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = 'p-2 bg-gray-100 rounded-lg mb-2';
+                    msgDiv.innerHTML = `<strong>${msg.playerName}:</strong> ${msg.text}`;
+                    chatMessagesDiv.appendChild(msgDiv);
+                });
+                // Scroll to bottom
+                chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
+            }
+        }
+
+        // --- ECONOMY ANALYTICS GRAPH ---
+        let econAnalyticsChart = null;
+        let econAnalyticsHistory = [];
+        function updateEconAnalytics(gameState) {
+            // Normalization factors: how many units per 1 input
+            const normalization = {
+                'Wheat': 1,
+                'Bread': 1,
+                'Sandwiches': 1/8, // 1 bread = 8 sandwiches
+                'Delivered Sandwiches': 1/10 // 10 sandwiches = 1 delivery
+            };
+            // Compute average price for each good
+            const avgPrices = {};
+            Object.keys(normalization).forEach(good => {
+                const prices = Object.values(gameState.players)
+                    .filter(p => rolesConfig && Object.values(rolesConfig).some(rc => rc.produces === good))
+                    .map(p => p.price)
+                    .filter(price => typeof price === 'number' && price > 0);
+                if (prices.length > 0) {
+                    avgPrices[good] = prices.reduce((a,b) => a+b,0) / prices.length;
+                } else {
+                    avgPrices[good] = 0;
+                }
+            });
+            // Normalize
+            const normalized = {};
+            Object.keys(avgPrices).forEach(good => {
+                normalized[good] = avgPrices[good] * normalization[good];
+            });
+            econAnalyticsHistory.push({
+                turn: gameState.turn,
+                ...normalized
+            });
+            // Keep only last 20 turns
+            if (econAnalyticsHistory.length > 20) econAnalyticsHistory.shift();
+            // Draw chart
+            const ctx = document.getElementById('econ-analytics-chart').getContext('2d');
+            const labels = econAnalyticsHistory.map(e => `T${e.turn}`);
+            const datasets = Object.keys(normalized).map(good => ({
+                label: good,
+                data: econAnalyticsHistory.map(e => e[good]),
+                fill: false,
+                borderColor: good === 'Wheat' ? '#fbbf24' : good === 'Bread' ? '#f87171' : good === 'Sandwiches' ? '#34d399' : '#6366f1',
+                tension: 0.2
+            }));
+            if (econAnalyticsChart) econAnalyticsChart.destroy();
+            econAnalyticsChart = new Chart(ctx, {
+                type: 'line',
+                data: { labels, datasets },
+                options: {
+                    plugins: { legend: { display: true } },
+                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Normalized Price' } } }
+                }
+            });
+        }
+
+
+
+        // --- START THE APP ---
+        initialize();
+    </script>
+
+</body>
+</html>
+
+
