@@ -639,7 +639,7 @@
                             } else if (role === 'baker') {
                                 costPerUnit = (supplierPrice || 1) * 2;
                             } else if (role === 'delivery') {
-                                costPerUnit = (supplierPrice || 1) * 10;
+                                costPerUnit = (supplierPrice || 1) * 5; // Changed from 10 to 5
                             } else if (role === 'farmer') {
                                 costPerUnit = (supplierPrice || 1) / 10;
                             }
@@ -647,9 +647,15 @@
                             let minPrice = Math.ceil(costPerUnit * (1.05 + Math.random() * 0.1));
                             // Set price below average to keep competitive
                             let price = Math.max(minPrice, Math.floor(avgMarketPrice * (0.8 + Math.random()*0.15)));
-                            // --- Clamp AI price to reasonable range ---
+                            // --- Clamp AI price to job-specific max ---
+                            const maxPrices = {
+                                'farmer': 5, // Wheat max 5
+                                'baker': 10, // Bread max 10
+                                'sandwichMaker': 20, // Sandwiches max 20
+                                'delivery': 40 // Delivered Sandwiches max 40
+                            };
+                            let maxReasonable = Math.min(maxPrices[role], Math.max(minPrice, Math.ceil(avgMarketPrice * 1.5)));
                             let minReasonable = Math.max(1, Math.floor(avgMarketPrice * 0.6));
-                            let maxReasonable = Math.max(minPrice, Math.ceil(avgMarketPrice * 1.5));
                             price = Math.max(minReasonable, Math.min(price, maxReasonable));
                             // If AI is low on stock, raise price a bit
                             if ((player.inventory[myGood] || 0) < 3) {
@@ -765,7 +771,7 @@
                     cost = Math.ceil(productionAmount / 8);
                     outputAmount = Math.floor(productionAmount);
                 } else if (role === 'delivery') {
-                    cost = Math.ceil(productionAmount * 10);
+                    cost = Math.ceil(productionAmount * 5); // Changed from 10 to 5
                     outputAmount = Math.floor(productionAmount);
                 }
                 if ((producer.inventory[inputGood] || 0) >= cost) {
@@ -1008,7 +1014,7 @@
             } else if (localPlayerRole === 'sandwichMaker') {
                 costDisplay = '1 ' + playerConfig.buys + ' per 8 units';
             } else if (localPlayerRole === 'delivery') {
-                costDisplay = '10 ' + playerConfig.buys + ' per unit';
+                costDisplay = '5 ' + playerConfig.buys + ' per unit';
             } else if (localPlayerRole === 'baker') {
                 costDisplay = '2 ' + playerConfig.buys + ' per unit';
             }
