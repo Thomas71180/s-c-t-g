@@ -630,7 +630,7 @@
                             if (marketPrices[myGood] && marketPrices[myGood].length > 0) {
                                 avgMarketPrice = marketPrices[myGood].reduce((a,b) => a+b,0) / marketPrices[myGood].length;
                             } else {
-                                avgMarketPrice = supplierPrice * 1.5;
+                                avgMarketPrice = (supplierPrice || 1) * 1.2; // Lower default
                             }
                             // --- Cost-based minimum price logic ---
                             let costPerUnit = 1;
@@ -643,13 +643,13 @@
                             } else if (role === 'farmer') {
                                 costPerUnit = (supplierPrice || 1) / 10;
                             }
-                            // Add a profit margin (10-30%)
-                            let minPrice = Math.ceil(costPerUnit * (1.15 + Math.random() * 0.15));
-                            // Set price just below average, but not too low
-                            let price = Math.max(minPrice, Math.floor(avgMarketPrice * (0.92 + Math.random()*0.08)));
+                            // Add a lower profit margin (5-15%)
+                            let minPrice = Math.ceil(costPerUnit * (1.05 + Math.random() * 0.1));
+                            // Set price below average to keep competitive
+                            let price = Math.max(minPrice, Math.floor(avgMarketPrice * (0.8 + Math.random()*0.15)));
                             // --- Clamp AI price to reasonable range ---
-                            let minReasonable = Math.max(1, Math.floor(avgMarketPrice * 0.5));
-                            let maxReasonable = Math.max(minPrice, Math.ceil(avgMarketPrice * 2));
+                            let minReasonable = Math.max(1, Math.floor(avgMarketPrice * 0.6));
+                            let maxReasonable = Math.max(minPrice, Math.ceil(avgMarketPrice * 1.5));
                             price = Math.max(minReasonable, Math.min(price, maxReasonable));
                             // If AI is low on stock, raise price a bit
                             if ((player.inventory[myGood] || 0) < 3) {
@@ -1126,31 +1126,36 @@
             Object.keys(avgPrices).forEach(good => {
                 normalized[good] = avgPrices[good] * normalization[good];
             });
-            econAnalyticsHistory.push({
-                turn: gameState.turn,
-                ...normalized
-            });
-            // Keep only last 20 turns
-            if (econAnalyticsHistory.length > 20) econAnalyticsHistory.shift();
-            // Draw chart
-            const ctx = document.getElementById('econ-analytics-chart').getContext('2d');
-            const labels = econAnalyticsHistory.map(e => `T${e.turn}`);
-            const datasets = Object.keys(normalized).map(good => ({
-                label: good,
-                data: econAnalyticsHistory.map(e => e[good]),
-                fill: false,
-                borderColor: good === 'Wheat' ? '#fbbf24' : good === 'Bread' ? '#f87171' : good === 'Sandwiches' ? '#34d399' : '#6366f1',
-                tension: 0.2
-            }));
-            if (econAnalyticsChart) econAnalyticsChart.destroy();
-            econAnalyticsChart = new Chart(ctx, {
-                type: 'line',
-                data: { labels, datasets },
-                options: {
-                    plugins: { legend: { display: true } },
-                    scales: { y: { beginAtZero: true, title: { display: true, text: 'Normalized Price' } } }
-                }
-            });
+            // Only add if we have data
+            if (Object.values(avgPrices).some(price => price > 0)) {
+                econAnalyticsHistory.push({
+                    turn: gameState.turn,
+                    ...normalized
+                });
+                // Keep only last 20 turns
+                if (econAnalyticsHistory.length > 20) econAnalyticsHistory.shift();
+            }
+            // Draw chart only if we have history
+            if (econAnalyticsHistory.length > 0) {
+                const ctx = document.getElementById('econ-analytics-chart').getContext('2d');
+                const labels = econAnalyticsHistory.map(e => `T${e.turn}`);
+                const datasets = Object.keys(normalized).map(good => ({
+                    label: good,
+                    data: econAnalyticsHistory.map(e => e[good]),
+                    fill: false,
+                    borderColor: good === 'Wheat' ? '#fbbf24' : good === 'Bread' ? '#f87171' : good === 'Sandwiches' ? '#34d399' : '#6366f1',
+                    tension: 0.2
+                }));
+                if (econAnalyticsChart) econAnalyticsChart.destroy();
+                econAnalyticsChart = new Chart(ctx, {
+                    type: 'line',
+                    data: { labels, datasets },
+                    options: {
+                        plugins: { legend: { display: true } },
+                        scales: { y: { beginAtZero: true, title: { display: true, text: 'Normalized Price' } } }
+                    }
+                });
+            }
         }
 
 
