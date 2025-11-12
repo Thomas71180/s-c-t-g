@@ -1107,49 +1107,31 @@
         let econAnalyticsChart = null;
         let econAnalyticsHistory = [];
         function updateEconAnalytics(gameState) {
-            // Normalization factors: how many units per 1 input
-            const normalization = {
-                'Wheat': 1,
-                'Bread': 1,
-                'Sandwiches': 1/8, // 1 bread = 8 sandwiches
-                'Delivered Sandwiches': 1/10 // 10 sandwiches = 1 delivery
-            };
-            // Compute average price for each good
-            const avgPrices = {};
-            Object.keys(normalization).forEach(good => {
-                const prices = Object.values(gameState.players)
-                    .filter(p => rolesConfig && Object.values(rolesConfig).some(rc => rc.produces === good))
-                    .map(p => p.price)
-                    .filter(price => typeof price === 'number' && price > 0);
-                if (prices.length > 0) {
-                    avgPrices[good] = prices.reduce((a,b) => a+b,0) / prices.length;
-                } else {
-                    avgPrices[good] = 0;
-                }
+            // Track each player's price over turns
+            const playerPrices = {};
+            Object.keys(gameState.players).forEach(role => {
+                const player = gameState.players[role];
+                const playerName = player.playerName;
+                const price = player.price || 0;
+                playerPrices[playerName] = price;
             });
-            // Normalize
-            const normalized = {};
-            Object.keys(avgPrices).forEach(good => {
-                normalized[good] = avgPrices[good] * normalization[good];
+            // Add to history each turn
+            econAnalyticsHistory.push({
+                turn: gameState.turn,
+                ...playerPrices
             });
-            // Only add if we have data
-            if (Object.values(avgPrices).some(price => price > 0)) {
-                econAnalyticsHistory.push({
-                    turn: gameState.turn,
-                    ...normalized
-                });
-                // Keep only last 20 turns
-                if (econAnalyticsHistory.length > 20) econAnalyticsHistory.shift();
-            }
-            // Draw chart only if we have history
+            // Keep only last 20 turns
+            if (econAnalyticsHistory.length > 20) econAnalyticsHistory.shift();
+            // Draw chart
             if (econAnalyticsHistory.length > 0) {
                 const ctx = document.getElementById('econ-analytics-chart').getContext('2d');
                 const labels = econAnalyticsHistory.map(e => `T${e.turn}`);
-                const datasets = Object.keys(normalized).map(good => ({
-                    label: good,
-                    data: econAnalyticsHistory.map(e => e[good]),
+                const playerNames = Object.keys(playerPrices);
+                const datasets = playerNames.map((playerName, index) => ({
+                    label: playerName,
+                    data: econAnalyticsHistory.map(e => e[playerName] || 0),
                     fill: false,
-                    borderColor: good === 'Wheat' ? '#fbbf24' : good === 'Bread' ? '#f87171' : good === 'Sandwiches' ? '#34d399' : '#6366f1',
+                    borderColor: ['#fbbf24', '#f87171', '#34d399', '#6366f1'][index % 4],
                     tension: 0.2
                 }));
                 if (econAnalyticsChart) econAnalyticsChart.destroy();
@@ -1158,7 +1140,7 @@
                     data: { labels, datasets },
                     options: {
                         plugins: { legend: { display: true } },
-                        scales: { y: { beginAtZero: true, title: { display: true, text: 'Normalized Price' } } }
+                        scales: { y: { beginAtZero: true, title: { display: true, text: 'Price ($)' } } }
                     }
                 });
             }
