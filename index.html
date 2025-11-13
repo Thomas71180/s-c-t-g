@@ -537,8 +537,6 @@
                     productionCost = Math.ceil(produceAmount * 5);
                     maxOutput = Math.floor(inputGoodStock / 5);
                 }
-                    productionCost = produceAmount;
-                }
                 if (produceAmount > maxOutput) {
                     showGameError(`Not enough ${inputGood} to produce ${produceAmount} ${playerConfig.produces}. Max possible: ${maxOutput}`);
                     return;
