@@ -639,7 +639,7 @@
                             } else if (role === 'baker') {
                                 costPerUnit = (supplierPrice || 1) * 2;
                             } else if (role === 'delivery') {
-                                costPerUnit = (supplierPrice || 1) * 5; // Changed from 10 to 5
+                                costPerUnit = (supplierPrice || 1) * 10;
                             } else if (role === 'farmer') {
                                 costPerUnit = (supplierPrice || 1) / 10;
                             }
@@ -771,7 +771,7 @@
                     cost = Math.ceil(productionAmount / 8);
                     outputAmount = Math.floor(productionAmount);
                 } else if (role === 'delivery') {
-                    cost = Math.ceil(productionAmount * 5); // Changed from 10 to 5
+                    cost = Math.ceil(productionAmount * 10);
                     outputAmount = Math.floor(productionAmount);
                 }
                 if ((producer.inventory[inputGood] || 0) >= cost) {
@@ -1057,7 +1057,7 @@
             Object.values(gameState.players).forEach(p => {
                 const role = Object.keys(gameState.players).find(key => gameState.players[key] === p);
                 const config = rolesConfig[role];
-                 marketPricesList.innerHTML += `<p>${config.produces}: <span class="font-semibold">$${p.price}</span></g>`;
+                 marketPricesList.innerHTML += `<p>${config.produces}: <span class="font-semibold">$${p.price}</span></p>`;
             });
 
             // Leaderboard
