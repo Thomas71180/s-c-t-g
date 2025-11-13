@@ -534,9 +534,9 @@
                     productionCost = Math.ceil(produceAmount / 8);
                     maxOutput = inputGoodStock * 8;
                 } else if (localPlayerRole === 'delivery') {
-                    productionCost = Math.ceil(produceAmount * 10);
-                    maxOutput = Math.floor(inputGoodStock / 10);
-                } else {
+                    productionCost = Math.ceil(produceAmount * 5);
+                    maxOutput = Math.floor(inputGoodStock / 5);
+                }
                     productionCost = produceAmount;
                 }
                 if (produceAmount > maxOutput) {
@@ -639,7 +639,7 @@
                             } else if (role === 'baker') {
                                 costPerUnit = (supplierPrice || 1) * 2;
                             } else if (role === 'delivery') {
-                                costPerUnit = (supplierPrice || 1) * 10;
+                                costPerUnit = (supplierPrice || 1) * 5;
                             } else if (role === 'farmer') {
                                 costPerUnit = (supplierPrice || 1) / 10;
                             }
@@ -700,7 +700,7 @@
                                 } else if (role === 'sandwichMaker') {
                                     productionAmount = inputStock * 8;
                                 } else if (role === 'delivery') {
-                                    productionAmount = Math.floor(inputStock / 10);
+                                    productionAmount = Math.floor(inputStock / 5);
                                 } else {
                                     productionAmount = inputStock;
                                 }
@@ -771,7 +771,7 @@
                     cost = Math.ceil(productionAmount / 8);
                     outputAmount = Math.floor(productionAmount);
                 } else if (role === 'delivery') {
-                    cost = Math.ceil(productionAmount * 10);
+                    cost = Math.ceil(productionAmount * 5);
                     outputAmount = Math.floor(productionAmount);
                 }
                 if ((producer.inventory[inputGood] || 0) >= cost) {
