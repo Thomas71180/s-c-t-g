@@ -685,12 +685,7 @@
                 const gameRef = getGameRef(currentGameId);
                 await updateDoc(gameRef, { isProcessing: true });
 
-                // Add log message that AI is thinking
-                const currentLog = gameState.log || [];
-                const newLog = [...currentLog, `${player.playerName} is thinking...`];
-                await updateDoc(gameRef, { log: newLog });
-
-                // Run AI turn immediately
+                // Run AI turn immediately without announcement
                 await runAITurn(gameRef, currentRole);
             }
         }
