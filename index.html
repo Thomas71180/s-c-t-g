@@ -732,37 +732,37 @@
                     const nextIndex = (currentIndex + 1) % playerOrder.length;
                     const nextPlayer = playerOrder[nextIndex];
 
-                    // If all players have produced, process sales and advance turn
-                    const allProduced = gameState.producedPlayers.length + 1 >= Object.keys(gameState.players).length;
-                    if (allProduced) {
-                        // Process sales
-                        const salesOrder = ['baker', 'sandwichMaker', 'delivery', 'farmer'];
-                        for (const sellerRole of salesOrder) {
+                    // Handle sales for this player as buyer
+                    const buyerRole = playerRole;
+                    const buyer = players[buyerRole];
+                    const buyerConfig = rolesConfig[buyerRole];
+                    if (buyerConfig.buys) {
+                        const itemToBuy = buyerConfig.buys;
+                        const sellerRole = Object.keys(rolesConfig).find(key => rolesConfig[key].produces === itemToBuy);
+                        if (sellerRole) {
                             const seller = players[sellerRole];
-                            const sellerConfig = rolesConfig[sellerRole];
-                            const itemToSell = sellerConfig.produces;
-                            const buyerRole = Object.keys(rolesConfig).find(key => rolesConfig[key].buys === itemToSell);
-                            if (buyerRole) {
-                                const buyer = players[buyerRole];
-                                const stock = seller.inventory[itemToSell] || 0;
-                                const demand = buyer.buyOrder.quantity;
-                                const price = seller.price;
-                                if (price <= 0) continue;
-                                // Prevent negative money: can only buy what you can afford
+                            const stock = seller.inventory[itemToBuy] || 0;
+                            const demand = buyer.buyOrder.quantity;
+                            const price = seller.price;
+                            if (price > 0) {
                                 const canAfford = Math.max(0, Math.floor(buyer.money / price));
                                 const quantityToTrade = Math.min(stock, demand, canAfford);
                                 if (quantityToTrade > 0) {
                                     seller.money += quantityToTrade * price;
-                                    seller.inventory[itemToSell] -= quantityToTrade;
+                                    seller.inventory[itemToBuy] -= quantityToTrade;
                                     buyer.money -= quantityToTrade * price;
-                                    buyer.inventory[itemToSell] = (buyer.inventory[itemToSell] || 0) + quantityToTrade;
-                                    newLog.push(`${buyer.playerName} bought ${quantityToTrade} ${itemToSell} from ${seller.playerName} for $${quantityToTrade * price}.`);
+                                    buyer.inventory[itemToBuy] = (buyer.inventory[itemToBuy] || 0) + quantityToTrade;
+                                    newLog.push(`${buyer.playerName} bought ${quantityToTrade} ${itemToBuy} from ${seller.playerName} for $${quantityToTrade * price}.`);
                                 } else if (demand > 0) {
-                                    newLog.push(`${buyer.playerName} could not buy ${itemToSell} from ${seller.playerName} (check funds/stock).`);
+                                    newLog.push(`${buyer.playerName} could not buy ${itemToBuy} from ${seller.playerName} (check funds/stock).`);
                                 }
                             }
                         }
+                    }
 
+                    // If all players have produced, process milkman and advance turn
+                    const allProduced = gameState.producedPlayers.length + 1 >= Object.keys(gameState.players).length;
+                    if (allProduced) {
                         // Milkman Fund
                         let newMilkmanFund = gameState.milkmanFund || 0;
                         newLog.push(`Everyone paid $5 to the Milkman.`);
