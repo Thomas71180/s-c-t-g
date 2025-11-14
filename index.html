@@ -692,10 +692,7 @@
                 const newLog = [...currentLog, `${player.playerName} is thinking...`];
                 await updateDoc(gameRef, { log: newLog });
 
-                // Wait 15 seconds
-                await new Promise(resolve => setTimeout(resolve, 15000));
-
-                // Run AI turn
+                // Run AI turn immediately
                 await runAITurn(gameRef, currentRole);
             }
         }
