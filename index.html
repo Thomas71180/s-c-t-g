@@ -363,23 +363,24 @@
         async function createGame() {
             const gameId = generateGameCode();
             const gameRef = getGameRef(gameId);
-            const initialGameState = {
-                gameId: gameId,
-                turn: 1,
-                status: "waiting_for_players",
-                currentPlayerTurn: 'farmer',
-                producedPlayers: [],
-                log: [`Game ${gameId} created. Waiting for players to join.`],
-                chatMessages: [],
-                milkmanFund: 0,
-                creatorId: userId,
-                players: {
-                    farmer: { playerId: null, playerName: "Farmer", isAI: false, money: 350, inventory: { 'Delivered Sandwiches': 4 }, price: 10, buyOrder: { quantity: 0 }, productionOrder: { quantity: 0 } },
-                    baker: { playerId: null, playerName: "Baker", isAI: false, money: 350, inventory: { Wheat: 10 }, price: 15, buyOrder: { quantity: 0 }, productionOrder: { quantity: 0 } },
-                    sandwichMaker: { playerId: null, playerName: "Sandwich Maker", isAI: false, money: 350, inventory: { Bread: 6 }, price: 30, buyOrder: { quantity: 0 }, productionOrder: { quantity: 0 } },
-                    delivery: { playerId: null, playerName: "Delivery", isAI: false, money: 350, inventory: { Sandwiches: 20 }, price: 50, buyOrder: { quantity: 0 }, productionOrder: { quantity: 0 } },
-                }
-            };
+        const initialGameState = {
+            gameId: gameId,
+            turn: 1,
+            status: "waiting_for_players",
+            currentPlayerTurn: 'farmer',
+            producedPlayers: [],
+            isProcessing: false,
+            log: [`Game ${gameId} created. Waiting for players to join.`],
+            chatMessages: [],
+            milkmanFund: 0,
+            creatorId: userId,
+            players: {
+                farmer: { playerId: null, playerName: "Farmer", isAI: false, money: 350, inventory: { 'Delivered Sandwiches': 4 }, price: 10, buyOrder: { quantity: 0 }, productionOrder: { quantity: 0 } },
+                baker: { playerId: null, playerName: "Baker", isAI: false, money: 350, inventory: { Wheat: 10 }, price: 15, buyOrder: { quantity: 0 }, productionOrder: { quantity: 0 } },
+                sandwichMaker: { playerId: null, playerName: "Sandwich Maker", isAI: false, money: 350, inventory: { Bread: 6 }, price: 30, buyOrder: { quantity: 0 }, productionOrder: { quantity: 0 } },
+                delivery: { playerId: null, playerName: "Delivery", isAI: false, money: 350, inventory: { Sandwiches: 20 }, price: 50, buyOrder: { quantity: 0 }, productionOrder: { quantity: 0 } },
+            }
+        };
             await setDoc(gameRef, initialGameState);
             await connectToGame(gameId);
         }
@@ -496,6 +497,7 @@
                 status: 'playing',
                 currentPlayerTurn: 'farmer',
                 producedPlayers: [],
+                isProcessing: false,
                 log: [...gameState.log, playersUpdated ? `Game started! AI has filled empty slots. Farmer's turn.` : "Game started! Farmer's turn."]
             });
         }
@@ -680,9 +682,12 @@
         async function handleCurrentPlayerTurn(gameState) {
             const currentRole = gameState.currentPlayerTurn;
             const player = gameState.players[currentRole];
-            if (player && player.isAI) {
-                // Add log message that AI is thinking
+            if (player && player.isAI && !gameState.isProcessing) {
+                // Set processing flag to prevent multiple AI turns
                 const gameRef = getGameRef(currentGameId);
+                await updateDoc(gameRef, { isProcessing: true });
+
+                // Add log message that AI is thinking
                 const currentLog = gameState.log || [];
                 const newLog = [...currentLog, `${player.playerName} is thinking...`];
                 await updateDoc(gameRef, { log: newLog });
@@ -807,7 +812,8 @@
                                 log: [...newLog, `🎉 ${winner.playerName} has reached $1000 and wins the game! 🎉`],
                                 milkmanFund: newMilkmanFund,
                                 status: 'ended',
-                                winner: winner.playerName
+                                winner: winner.playerName,
+                                isProcessing: false
                             });
                         } else {
                             transaction.update(gameRef, {
@@ -816,7 +822,8 @@
                                 currentPlayerTurn: 'farmer',
                                 producedPlayers: [],
                                 log: [...newLog, `Turn ${gameState.turn + 1} begins. Farmer's turn.`],
-                                milkmanFund: newMilkmanFund
+                                milkmanFund: newMilkmanFund,
+                                isProcessing: false
                             });
                         }
                     } else {
@@ -824,7 +831,8 @@
                             players: players,
                             currentPlayerTurn: nextPlayer,
                             producedPlayers: [...gameState.producedPlayers, playerRole],
-                            log: newLog
+                            log: newLog,
+                            isProcessing: false
                         });
                     }
                 });
