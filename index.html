@@ -599,7 +599,7 @@
                     const player = gameState.players[aiRole];
                     if (!player.isAI) return;
 
-                    // AI Logic (same as before, but for individual turn)
+                    // AI Logic (smart with price limits)
                     const config = rolesConfig[aiRole];
                     const supplier = gameState.players[config.input];
                     const supplierPrice = supplier ? supplier.price : 1;
@@ -681,11 +681,9 @@
             const currentRole = gameState.currentPlayerTurn;
             const player = gameState.players[currentRole];
             if (player && player.isAI && !gameState.isProcessing) {
-                // Set processing flag to prevent multiple AI turns
+                // Auto-process AI turn immediately
                 const gameRef = getGameRef(currentGameId);
                 await updateDoc(gameRef, { isProcessing: true });
-
-                // Run AI turn immediately without announcement
                 await runAITurn(gameRef, currentRole);
             }
         }
@@ -735,13 +733,6 @@
                         }
                     }
 
-                    // Determine next player turn
-                    const turnOrder = ['farmer', 'baker', 'sandwichMaker', 'delivery'];
-                    const currentTurnIndex = turnOrder.indexOf(playerRole);
-                    const nextTurnIndex = (currentTurnIndex + 1) % turnOrder.length;
-                    const nextPlayer = turnOrder[nextTurnIndex];
-                    const isLastPlayer = currentTurnIndex === turnOrder.length - 1;
-
                     // Handle sales for this player as buyer
                     const buyerRole = playerRole;
                     const buyer = players[buyerRole];
@@ -769,6 +760,13 @@
                             }
                         }
                     }
+
+                    // Determine next player turn
+                    const turnOrder = ['farmer', 'baker', 'sandwichMaker', 'delivery'];
+                    const currentTurnIndex = turnOrder.indexOf(playerRole);
+                    const nextTurnIndex = (currentTurnIndex + 1) % turnOrder.length;
+                    const nextPlayer = turnOrder[nextTurnIndex];
+                    const isLastPlayer = currentTurnIndex === turnOrder.length - 1;
 
                     // Process milkman and advance turn after last player
                     if (isLastPlayer) {
