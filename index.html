@@ -647,10 +647,10 @@
                             let price = Math.max(minPrice, Math.floor(avgMarketPrice * (0.8 + Math.random()*0.15)));
                             // --- Clamp AI price to job-specific max ---
                             const maxPrices = {
-                                'farmer': 20, // Wheat max 20
-                                'baker': 40, // Bread max 40
-                                'sandwichMaker': 60, // Sandwiches max 60
-                                'delivery': 100 // Delivered Sandwiches max 100
+                                'farmer': 10, // Wheat max 10
+                                'baker': 21, // Bread max 21
+                                'sandwichMaker': 10, // Sandwiches max 10
+                                'delivery': 55 // Delivered Sandwiches max 55
                             };
                             let maxReasonable = maxPrices[role];
                             let minReasonable = Math.max(1, Math.floor(avgMarketPrice * 0.6));
