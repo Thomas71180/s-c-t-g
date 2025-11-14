@@ -573,11 +573,16 @@
 
             const gameRef = getGameRef(currentGameId);
 
+            // Add log message for human player turn
+            const currentLog = currentGameState.log || [];
+            const newLog = [...currentLog, `${currentGameState.players[localPlayerRole].playerName} has submitted their turn.`];
+
             await updateDoc(gameRef, {
                 [`players.${localPlayerRole}.price`]: price,
                 [`players.${localPlayerRole}.buyOrder`]: { quantity: buyAmount },
                 [`players.${localPlayerRole}.productionOrder`]: { quantity: produceAmount },
-                [`producedPlayers`]: [...(currentGameState.producedPlayers || []), localPlayerRole]
+                [`producedPlayers`]: [...(currentGameState.producedPlayers || []), localPlayerRole],
+                log: newLog
             });
 
             // Process production for this player immediately
@@ -676,8 +681,17 @@
             const currentRole = gameState.currentPlayerTurn;
             const player = gameState.players[currentRole];
             if (player && player.isAI) {
+                // Add log message that AI is thinking
+                const gameRef = getGameRef(currentGameId);
+                const currentLog = gameState.log || [];
+                const newLog = [...currentLog, `${player.playerName} is thinking...`];
+                await updateDoc(gameRef, { log: newLog });
+
+                // Wait 15 seconds
+                await new Promise(resolve => setTimeout(resolve, 15000));
+
                 // Run AI turn
-                await runAITurn(getGameRef(currentGameId), currentRole);
+                await runAITurn(gameRef, currentRole);
             }
         }
         
