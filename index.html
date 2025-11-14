@@ -686,6 +686,8 @@
                             }
                             // Clamp again after all logic
                             price = Math.max(minReasonable, Math.min(price, maxReasonable));
+                            // Strict cap to ensure AI never exceeds job-specific max
+                            price = Math.min(price, maxPrices[role]);
                             player.price = price;
                             // --- Production: try to use as much as possible ---
                             let productionAmount = 0;
