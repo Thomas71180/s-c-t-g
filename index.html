@@ -367,7 +367,8 @@
                 gameId: gameId,
                 turn: 1,
                 status: "waiting_for_players",
-                readyPlayers: [],
+                currentPlayerTurn: 'farmer',
+                producedPlayers: [],
                 log: [`Game ${gameId} created. Waiting for players to join.`],
                 chatMessages: [],
                 milkmanFund: 0,
@@ -493,7 +494,9 @@
             await updateDoc(gameRef, {
                 players: gameState.players,
                 status: 'playing',
-                log: [...gameState.log, playersUpdated ? `Game started! AI has filled empty slots.` : "Game started!"]
+                currentPlayerTurn: 'farmer',
+                producedPlayers: [],
+                log: [...gameState.log, playersUpdated ? `Game started! AI has filled empty slots. Farmer's turn.` : "Game started! Farmer's turn."]
             });
         }
 
@@ -552,7 +555,7 @@
                 const supplier = currentGameState.players[playerConfig.input];
                 const supplierPrice = supplier.price || 0;
                 const supplierStock = supplier.inventory[playerConfig.buys] || 0;
-                
+
                 if (buyAmount * supplierPrice > player.money) {
                     showGameError(`Not enough money to buy ${buyAmount} ${playerConfig.buys}.`);
                     return;
@@ -565,300 +568,260 @@
             // --- End Validation ---
 
             document.getElementById('submit-turn-btn').disabled = true;
-            document.getElementById('turn-status').textContent = 'Your turn is submitted. Waiting for others...';
+            document.getElementById('turn-status').textContent = 'Your turn is submitted. Processing...';
             gameError.textContent = ''; // Clear errors
 
             const gameRef = getGameRef(currentGameId);
-            
-            const newReadyPlayers = [...new Set([...(await getDoc(gameRef)).data().readyPlayers, localPlayerRole])];
-            
+
             await updateDoc(gameRef, {
                 [`players.${localPlayerRole}.price`]: price,
                 [`players.${localPlayerRole}.buyOrder`]: { quantity: buyAmount },
                 [`players.${localPlayerRole}.productionOrder`]: { quantity: produceAmount },
-                readyPlayers: newReadyPlayers
+                [`producedPlayers`]: [...(currentGameState.producedPlayers || []), localPlayerRole]
             });
-            
-            runAITurnsIfNeeded(getGameRef(currentGameId));
+
+            // Process production for this player immediately
+            await processPlayerProduction(gameRef, localPlayerRole);
         }
 
-        async function runAITurnsIfNeeded(gameRef) {
+        async function runAITurn(gameRef, aiRole) {
             try {
                 await runTransaction(db, async (transaction) => {
                     const gameDoc = await transaction.get(gameRef);
                     if (!gameDoc.exists()) throw "Game does not exist!";
                     const gameState = gameDoc.data();
-                    let updated = false;
-                    // --- Smarter AI Logic: Compete, analyze market, act more often ---
-                    // Find lowest money player
-                    let lowestMoney = Infinity;
-                    let lowestRole = null;
-                    for (const role in gameState.players) {
-                        const p = gameState.players[role];
-                        if (p.money < lowestMoney) {
-                            lowestMoney = p.money;
-                            lowestRole = role;
+                    const player = gameState.players[aiRole];
+                    if (!player.isAI) return;
+
+                    // AI Logic (same as before, but for individual turn)
+                    const config = rolesConfig[aiRole];
+                    const supplier = gameState.players[config.input];
+                    const supplierPrice = supplier ? supplier.price : 1;
+                    const supplierStock = supplier ? (supplier.inventory[config.buys] || 0) : Infinity;
+
+                    // Market analysis for price
+                    let avgMarketPrice = (supplierPrice || 1) * 1.2;
+                    // Cost-based minimum price logic
+                    let costPerUnit = 1;
+                    if (aiRole === 'sandwichMaker') {
+                        costPerUnit = (supplierPrice || 1) / 8;
+                    } else if (aiRole === 'baker') {
+                        costPerUnit = (supplierPrice || 1) * 2;
+                    } else if (aiRole === 'delivery') {
+                        costPerUnit = (supplierPrice || 1) * 5;
+                    } else if (aiRole === 'farmer') {
+                        costPerUnit = (supplierPrice || 1) / 10;
+                    }
+                    let minPrice = Math.ceil(costPerUnit * (1.05 + Math.random() * 0.1));
+                    let price = Math.max(minPrice, Math.floor(avgMarketPrice * (0.8 + Math.random()*0.15)));
+
+                    // Clamp AI price to job-specific max
+                    const maxPrices = {
+                        'farmer': 10,
+                        'baker': 20,
+                        'sandwichMaker': 8,
+                        'delivery': 55
+                    };
+                    let maxReasonable = maxPrices[aiRole];
+                    let minReasonable = Math.max(1, Math.floor(avgMarketPrice * 0.6));
+                    price = Math.max(minReasonable, Math.min(price, maxReasonable));
+                    price = Math.min(price, maxPrices[aiRole]);
+                    player.price = price;
+
+                    // Production
+                    let productionAmount = 0;
+                    const inputStock = player.inventory[config.buys] || 0;
+                    if (inputStock > 0) {
+                        if (aiRole === 'farmer') {
+                            productionAmount = inputStock * 10;
+                        } else if (aiRole === 'baker') {
+                            productionAmount = Math.floor(inputStock / 2);
+                        } else if (aiRole === 'sandwichMaker') {
+                            productionAmount = inputStock * 8;
+                        } else if (aiRole === 'delivery') {
+                            productionAmount = Math.floor(inputStock / 5);
                         }
                     }
-                    // Precompute market prices for each good
-                    const marketPrices = {};
-                    Object.keys(rolesConfig).forEach(role => {
-                        const good = rolesConfig[role].produces;
-                        marketPrices[good] = [];
+                    player.productionOrder.quantity = productionAmount;
+
+                    // Purchase
+                    const budget = player.money * 0.8;
+                    const affordableQuantity = supplierPrice > 0 ? Math.floor(budget / supplierPrice) : 0;
+                    let neededQuantity = 10 - (player.inventory[config.buys] || 0);
+                    if (neededQuantity < 0) neededQuantity = 0;
+                    let buyAmount = Math.min(affordableQuantity, neededQuantity, supplierStock);
+                    if (aiRole === 'farmer') {
+                        const farmerNeeded = Math.max(0, 2 - (player.inventory[config.buys] || 0));
+                        buyAmount = Math.min(affordableQuantity, farmerNeeded, supplierStock);
+                    }
+                    player.buyOrder.quantity = buyAmount;
+
+                    transaction.update(gameRef, {
+                        [`players.${aiRole}.price`]: player.price,
+                        [`players.${aiRole}.buyOrder`]: player.buyOrder,
+                        [`players.${aiRole}.productionOrder`]: player.productionOrder,
+                        [`producedPlayers`]: [...(gameState.producedPlayers || []), aiRole]
                     });
-                    Object.values(gameState.players).forEach(p => {
-                        const role = Object.keys(gameState.players).find(key => gameState.players[key] === p);
-                        if (role) {
-                            const good = rolesConfig[role].produces;
-                            if (typeof p.price === 'number' && p.price > 0) {
-                                marketPrices[good].push(p.price);
-                            }
-                        }
-                    });
-                    for (const role in gameState.players) {
-                        const player = gameState.players[role];
-                        if (player.isAI && !gameState.readyPlayers.includes(role)) {
-                            const config = rolesConfig[role];
-                            const supplier = gameState.players[config.input];
-                            const supplierPrice = supplier ? supplier.price : 1;
-                            const supplierStock = supplier ? (supplier.inventory[config.buys] || 0) : Infinity;
-                            // --- Market analysis for price ---
-                            let avgMarketPrice = 0;
-                            const myGood = config.produces;
-                            if (marketPrices[myGood] && marketPrices[myGood].length > 0) {
-                                avgMarketPrice = marketPrices[myGood].reduce((a,b) => a+b,0) / marketPrices[myGood].length;
-                            } else {
-                                avgMarketPrice = (supplierPrice || 1) * 1.2; // Lower default
-                            }
-                            // --- Cost-based minimum price logic ---
-                            let costPerUnit = 1;
-                            if (role === 'sandwichMaker') {
-                                costPerUnit = (supplierPrice || 1) / 8;
-                            } else if (role === 'baker') {
-                                costPerUnit = (supplierPrice || 1) * 2;
-                            } else if (role === 'delivery') {
-                                costPerUnit = (supplierPrice || 1) * 5;
-                            } else if (role === 'farmer') {
-                                costPerUnit = (supplierPrice || 1) / 10;
-                            }
-                            // Add a lower profit margin (5-15%)
-                            let minPrice = Math.ceil(costPerUnit * (1.05 + Math.random() * 0.1));
-                            // Set price below average to keep competitive
-                            let price = Math.max(minPrice, Math.floor(avgMarketPrice * (0.8 + Math.random()*0.15)));
-                            // --- Clamp AI price to job-specific max ---
-                            const maxPrices = {
-                                'farmer': 10, // Wheat max 10
-                                'baker': 20, // Bread max 20
-                                'sandwichMaker': 8, // Sandwiches max 8
-                                'delivery': 55 // Delivered Sandwiches max 55
-                            };
-                            let maxReasonable = maxPrices[role];
-                            let minReasonable = Math.max(1, Math.floor(avgMarketPrice * 0.6));
-                            price = Math.max(minReasonable, Math.min(price, maxReasonable));
-                            // If AI is low on stock, raise price a bit
-                            if ((player.inventory[myGood] || 0) < 3) {
-                                price = Math.max(price, Math.floor(avgMarketPrice * 1.1));
-                            }
-                            // If AI is overstocked, lower price
-                            if ((player.inventory[myGood] || 0) > 10) {
-                                price = Math.floor(price * 0.85);
-                            }
-                            // If AI is behind in money, be more aggressive
-                            let buyBudgetPercent = 0.8;
-                            let targetInputStock = 10;
-                            if (player.money < 50 || player.money < Math.max(...Object.values(gameState.players).map(p=>p.money))) {
-                                price = Math.floor(price * 0.90);
-                                buyBudgetPercent = 1.0;
-                                targetInputStock = 20;
-                            }
-                            // Sudden generosity if someone is going bankrupt
-                            let generosity = false;
-                            if (lowestMoney < 10 && player.money > 50 && role !== lowestRole && Math.random() < 0.3) {
-                                price = Math.max(1, Math.floor(price * 0.7));
-                                buyBudgetPercent = 0.5;
-                                generosity = true;
-                            }
-                            // Sudden greed
-                            if (Math.random() < 0.10) {
-                                price = Math.max(minPrice, Math.floor(price * 1.5));
-                                buyBudgetPercent = 1.0;
-                                targetInputStock = 20;
-                            }
-                            // Clamp again after all logic
-                            price = Math.max(minReasonable, Math.min(price, maxReasonable));
-                            // Strict cap to ensure AI never exceeds job-specific max
-                            price = Math.min(price, maxPrices[role]);
-                            player.price = price;
-                            // --- Production: try to use as much as possible ---
-                            let productionAmount = 0;
-                            const inputStock = player.inventory[config.buys] || 0;
-                            if (inputStock > 0) {
-                                if (role === 'farmer') {
-                                    productionAmount = inputStock * 10;
-                                } else if (role === 'baker') {
-                                    productionAmount = Math.floor(inputStock / 2);
-                                } else if (role === 'sandwichMaker') {
-                                    productionAmount = inputStock * 8;
-                                } else if (role === 'delivery') {
-                                    productionAmount = Math.floor(inputStock / 5);
-                                } else {
-                                    productionAmount = inputStock;
-                                }
-                            }
-                            player.productionOrder.quantity = productionAmount;
-                            // --- Purchase: try to buy as much as possible within budget ---
-                            const budget = player.money * buyBudgetPercent;
-                            const affordableQuantity = supplierPrice > 0 ? Math.floor(budget / supplierPrice) : 0;
-                            let neededQuantity = targetInputStock - (player.inventory[config.buys] || 0);
-                            if (neededQuantity < 0) neededQuantity = 0;
-                            let buyAmount = Math.min(affordableQuantity, neededQuantity, supplierStock);
-                            if (role === 'farmer') {
-                                const farmerNeeded = Math.max(0, 2 - (player.inventory[config.buys] || 0));
-                                buyAmount = Math.min(affordableQuantity, farmerNeeded, supplierStock);
-                            }
-                            // Be more aggressive if low on stock
-                            if ((player.inventory[config.buys] || 0) < 2 && affordableQuantity > 0) {
-                                buyAmount = Math.max(buyAmount, 1);
-                            }
-                            player.buyOrder.quantity = buyAmount;
-                            // Finalize
-                            gameState.readyPlayers.push(role);
-                            let aiMsg = `${player.playerName} has submitted their turn.`;
-                            if (generosity) aiMsg += ' (AI is being generous!)';
-                            gameState.log.push(aiMsg);
-                            updated = true;
-                        }
-                    }
-                    if(updated) {
-                        transaction.update(gameRef, {
-                            players: gameState.players,
-                            readyPlayers: gameState.readyPlayers,
-                            log: gameState.log,
-                        });
-                    }
+
+                    // Process AI production immediately
+                    await processPlayerProduction(gameRef, aiRole);
                 });
             } catch (error) {
                 console.error("AI turn error:", error);
             }
         }
+
+        // Function to handle AI turns when it's their turn
+        async function handleCurrentPlayerTurn(gameState) {
+            const currentRole = gameState.currentPlayerTurn;
+            const player = gameState.players[currentRole];
+            if (player && player.isAI) {
+                // Run AI turn
+                await runAITurn(getGameRef(currentGameId), currentRole);
+            }
+        }
         
-        async function processTurn(gameState) {
-            console.log('processTurn called, turn:', gameState.turn);
-            const newLog = [...gameState.log, `Processing Turn #${gameState.turn}...`];
-            const players = JSON.parse(JSON.stringify(gameState.players));
-            let newMilkmanFund = gameState.milkmanFund || 0;
+        async function processPlayerProduction(gameRef, playerRole) {
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const gameDoc = await transaction.get(gameRef);
+                    if (!gameDoc.exists()) throw "Game does not exist!";
+                    const gameState = gameDoc.data();
+                    const newLog = [...gameState.log];
+                    const players = JSON.parse(JSON.stringify(gameState.players));
 
-            // --- PHASE 1: Production ---
-            const productionOrder = ['farmer', 'baker', 'sandwichMaker', 'delivery'];
-            for (const role of productionOrder) {
-                const producer = players[role];
-                const config = rolesConfig[role];
-                const productionAmount = producer.productionOrder.quantity;
+                    // Production for this player
+                    const producer = players[playerRole];
+                    const config = rolesConfig[playerRole];
+                    const productionAmount = producer.productionOrder.quantity;
 
-                if (productionAmount <= 0) continue;
+                    if (productionAmount > 0) {
+                        const inputGood = config.buys;
+                        const producedGood = config.produces;
 
-                const inputGood = config.buys;
-                const producedGood = config.produces;
-                
-                let cost = 0;
-                let outputAmount = productionAmount;
-                if (role === 'farmer') {
-                    cost = Math.ceil(productionAmount / 10);
-                } else if (role === 'baker') {
-                    cost = Math.ceil(productionAmount * 2);
-                    outputAmount = Math.floor(productionAmount);
-                } else if (role === 'sandwichMaker') {
-                    cost = Math.ceil(productionAmount / 8);
-                    outputAmount = Math.floor(productionAmount);
-                } else if (role === 'delivery') {
-                    cost = Math.ceil(productionAmount * 5);
-                    outputAmount = Math.floor(productionAmount);
-                }
-                if ((producer.inventory[inputGood] || 0) >= cost) {
-                    producer.inventory[inputGood] -= cost;
-                    producer.inventory[producedGood] = (producer.inventory[producedGood] || 0) + outputAmount;
-                    if (role === 'farmer') {
-                        newLog.push(`${producer.playerName} used ${cost} ${inputGood} and produced ${productionAmount} ${producedGood}.`);
+                        let cost = 0;
+                        let outputAmount = productionAmount;
+                        if (playerRole === 'farmer') {
+                            cost = Math.ceil(productionAmount / 10);
+                        } else if (playerRole === 'baker') {
+                            cost = Math.ceil(productionAmount * 2);
+                            outputAmount = Math.floor(productionAmount);
+                        } else if (playerRole === 'sandwichMaker') {
+                            cost = Math.ceil(productionAmount / 8);
+                            outputAmount = Math.floor(productionAmount);
+                        } else if (playerRole === 'delivery') {
+                            cost = Math.ceil(productionAmount * 5);
+                            outputAmount = Math.floor(productionAmount);
+                        }
+                        if ((producer.inventory[inputGood] || 0) >= cost) {
+                            producer.inventory[inputGood] -= cost;
+                            producer.inventory[producedGood] = (producer.inventory[producedGood] || 0) + outputAmount;
+                            if (playerRole === 'farmer') {
+                                newLog.push(`${producer.playerName} used ${cost} ${inputGood} and produced ${productionAmount} ${producedGood}.`);
+                            } else {
+                                newLog.push(`${producer.playerName} turned ${cost} ${inputGood} into ${producedGood}.`);
+                            }
+                        } else {
+                            newLog.push(`${producer.playerName} failed to produce ${producedGood} (not enough ${inputGood}).`);
+                        }
+                    }
+
+                    // Determine next player turn
+                    const playerOrder = ['farmer', 'baker', 'sandwichMaker', 'delivery'];
+                    const currentIndex = playerOrder.indexOf(playerRole);
+                    const nextIndex = (currentIndex + 1) % playerOrder.length;
+                    const nextPlayer = playerOrder[nextIndex];
+
+                    // If all players have produced, process sales and advance turn
+                    const allProduced = gameState.producedPlayers.length + 1 >= Object.keys(gameState.players).length;
+                    if (allProduced) {
+                        // Process sales
+                        const salesOrder = ['baker', 'sandwichMaker', 'delivery', 'farmer'];
+                        for (const sellerRole of salesOrder) {
+                            const seller = players[sellerRole];
+                            const sellerConfig = rolesConfig[sellerRole];
+                            const itemToSell = sellerConfig.produces;
+                            const buyerRole = Object.keys(rolesConfig).find(key => rolesConfig[key].buys === itemToSell);
+                            if (buyerRole) {
+                                const buyer = players[buyerRole];
+                                const stock = seller.inventory[itemToSell] || 0;
+                                const demand = buyer.buyOrder.quantity;
+                                const price = seller.price;
+                                if (price <= 0) continue;
+                                // Prevent negative money: can only buy what you can afford
+                                const canAfford = Math.max(0, Math.floor(buyer.money / price));
+                                const quantityToTrade = Math.min(stock, demand, canAfford);
+                                if (quantityToTrade > 0) {
+                                    seller.money += quantityToTrade * price;
+                                    seller.inventory[itemToSell] -= quantityToTrade;
+                                    buyer.money -= quantityToTrade * price;
+                                    buyer.inventory[itemToSell] = (buyer.inventory[itemToSell] || 0) + quantityToTrade;
+                                    newLog.push(`${buyer.playerName} bought ${quantityToTrade} ${itemToSell} from ${seller.playerName} for $${quantityToTrade * price}.`);
+                                } else if (demand > 0) {
+                                    newLog.push(`${buyer.playerName} could not buy ${itemToSell} from ${seller.playerName} (check funds/stock).`);
+                                }
+                            }
+                        }
+
+                        // Milkman Fund
+                        let newMilkmanFund = gameState.milkmanFund || 0;
+                        newLog.push(`Everyone paid $5 to the Milkman.`);
+                        for (const role of Object.keys(players)) {
+                            if (players[role].money >= 5) {
+                                players[role].money -= 5;
+                                newMilkmanFund += 5;
+                            }
+                        }
+
+                        const milkmanChance = 0.10; // 10% chance per turn
+                        if (Math.random() < milkmanChance && newMilkmanFund > 0) {
+                            const playerRoles = Object.keys(players);
+                            const luckyRole = playerRoles[Math.floor(Math.random() * playerRoles.length)];
+                            players[luckyRole].money += newMilkmanFund;
+                            newLog.push(`The Milkman has arrived! ${players[luckyRole].playerName} received the entire fund of $${newMilkmanFund}!`);
+                            newMilkmanFund = 0;
+                        }
+
+                        // Game end check
+                        const winner = Object.values(players).find(p => p.money >= 1000);
+                        if (winner) {
+                            transaction.update(gameRef, {
+                                players: players,
+                                turn: gameState.turn + 1,
+                                currentPlayerTurn: 'farmer',
+                                producedPlayers: [],
+                                log: [...newLog, `🎉 ${winner.playerName} has reached $1000 and wins the game! 🎉`],
+                                milkmanFund: newMilkmanFund,
+                                status: 'ended',
+                                winner: winner.playerName
+                            });
+                        } else {
+                            transaction.update(gameRef, {
+                                players: players,
+                                turn: gameState.turn + 1,
+                                currentPlayerTurn: 'farmer',
+                                producedPlayers: [],
+                                log: [...newLog, `Turn ${gameState.turn + 1} begins. Farmer's turn.`],
+                                milkmanFund: newMilkmanFund
+                            });
+                        }
                     } else {
-                        newLog.push(`${producer.playerName} turned ${cost} ${inputGood} into ${producedGood}.`);
+                        transaction.update(gameRef, {
+                            players: players,
+                            currentPlayerTurn: nextPlayer,
+                            producedPlayers: [...gameState.producedPlayers, playerRole],
+                            log: newLog
+                        });
                     }
-                } else {
-                    newLog.push(`${producer.playerName} failed to produce ${producedGood} (not enough ${inputGood}).`);
-                }
-            }
-
-            // --- PHASE 2: Sales ---
-            const salesOrder = ['baker', 'sandwichMaker', 'delivery', 'farmer'];
-            for (const sellerRole of salesOrder) {
-                const seller = players[sellerRole];
-                const sellerConfig = rolesConfig[sellerRole];
-                const itemToSell = sellerConfig.produces;
-                const buyerRole = Object.keys(rolesConfig).find(key => rolesConfig[key].buys === itemToSell);
-                if (buyerRole) {
-                    const buyer = players[buyerRole];
-                    const stock = seller.inventory[itemToSell] || 0;
-                    const demand = buyer.buyOrder.quantity;
-                    const price = seller.price;
-                    if (price <= 0) continue;
-                    // Prevent negative money: can only buy what you can afford
-                    const canAfford = Math.max(0, Math.floor(buyer.money / price));
-                    const quantityToTrade = Math.min(stock, demand, canAfford);
-                    if (quantityToTrade > 0) {
-                        seller.money += quantityToTrade * price;
-                        seller.inventory[itemToSell] -= quantityToTrade;
-                        buyer.money -= quantityToTrade * price;
-                        buyer.inventory[itemToSell] = (buyer.inventory[itemToSell] || 0) + quantityToTrade;
-                        newLog.push(`${buyer.playerName} bought ${quantityToTrade} ${itemToSell} from ${seller.playerName} for $${quantityToTrade * price}.`);
-                    } else if (demand > 0) {
-                        newLog.push(`${buyer.playerName} could not buy ${itemToSell} from ${seller.playerName} (check funds/stock).`);
-                    }
-                }
-            }
-            
-            // --- PHASE 3: Milkman Fund ---
-            newLog.push(`Everyone paid $5 to the Milkman.`);
-            for (const role of Object.keys(players)) {
-                // Only pay if you have enough money
-                if (players[role].money >= 5) {
-                    players[role].money -= 5;
-                    newMilkmanFund += 5;
-                }
-            }
-
-            const milkmanChance = 0.10; // 10% chance per turn
-            if (Math.random() < milkmanChance && newMilkmanFund > 0) {
-                const playerRoles = Object.keys(players);
-                const luckyRole = playerRoles[Math.floor(Math.random() * playerRoles.length)];
-                
-                players[luckyRole].money += newMilkmanFund;
-                newLog.push(`The Milkman has arrived! ${players[luckyRole].playerName} received the entire fund of $${newMilkmanFund}!`);
-                newMilkmanFund = 0; // Reset fund
-            }
-
-            // --- GAME END CHECK ---
-            const winner = Object.values(players).find(p => p.money >= 1000);
-            if (winner) {
-                newLog.push(`🎉 ${winner.playerName} has reached $1000 and wins the game! 🎉`);
-                await updateDoc(getGameRef(gameState.gameId), {
-                    players: players,
-                    turn: gameState.turn + 1,
-                    readyPlayers: [],
-                    log: newLog,
-                    milkmanFund: newMilkmanFund,
-                    status: 'ended',
-                    winner: winner.playerName
                 });
-                return;
+            } catch (error) {
+                console.error("Error processing player production:", error);
             }
+        }
 
-            // --- Update Firestore ---
-            await updateDoc(getGameRef(gameState.gameId), {
-                players: players,
-                turn: gameState.turn + 1,
-                readyPlayers: [],
-                log: newLog,
-                milkmanFund: newMilkmanFund
-            });
+        async function processTurn(gameState) {
+            // This function is now obsolete, but kept for compatibility
+            console.log('processTurn called, but should not be used in new turn system');
         }
 
         async function sendMessage() {
@@ -899,18 +862,16 @@
 
         // --- UI UPDATING ---
         function updateUI(gameState) {
-            console.log('updateUI called, status:', gameState.status, 'readyPlayers:', gameState.readyPlayers);
-            if (gameState.status === 'playing' && gameState.readyPlayers.length === 4) {
-                 processTurn(gameState);
-                 return; 
-            }
-            
+            console.log('updateUI called, status:', gameState.status, 'currentPlayerTurn:', gameState.currentPlayerTurn);
+
             if (gameState.status === 'waiting_for_players') {
                 showScreen('role');
                 renderRoleScreen(gameState);
             } else if (gameState.status === 'playing') {
                 showScreen('game');
                 renderGameScreen(gameState);
+                // Handle AI turn if it's AI's turn
+                handleCurrentPlayerTurn(gameState);
             } else if (gameState.status === 'ended') {
                 showScreen('game');
                 renderGameScreen(gameState, true);
@@ -981,32 +942,30 @@
             document.getElementById('player-money').textContent = player.money.toLocaleString();
 
             // Status Bar
-            const isTurnSubmitted = gameState.readyPlayers.includes(localPlayerRole);
-            const waitingFor = Object.keys(gameState.players).filter(p => !gameState.readyPlayers.includes(p));
+            const isCurrentPlayer = gameState.currentPlayerTurn === localPlayerRole;
             const turnStatusEl = document.getElementById('turn-status');
-            if (waitingFor.length === 0 && gameState.readyPlayers.length > 0) {
-                turnStatusEl.textContent = 'Processing turn...';
-            } else if (isTurnSubmitted) {
-                turnStatusEl.textContent = `Waiting for: ${waitingFor.map(r => gameState.players[r].playerName).join(', ')}`;
-            } else {
+            if (isCurrentPlayer) {
                 turnStatusEl.textContent = `Your turn! Please submit your actions.`;
+            } else {
+                const currentPlayerName = gameState.players[gameState.currentPlayerTurn]?.playerName || gameState.currentPlayerTurn;
+                turnStatusEl.textContent = `Waiting for ${currentPlayerName}'s turn.`;
             }
 
             // Action Panel
-            document.getElementById('submit-turn-btn').disabled = isTurnSubmitted;
-            document.getElementById('set-price-input').disabled = isTurnSubmitted;
-            document.getElementById('produce-amount-input').disabled = isTurnSubmitted;
-            document.getElementById('buy-amount-input').disabled = isTurnSubmitted;
+            document.getElementById('submit-turn-btn').disabled = !isCurrentPlayer;
+            document.getElementById('set-price-input').disabled = !isCurrentPlayer;
+            document.getElementById('produce-amount-input').disabled = !isCurrentPlayer;
+            document.getElementById('buy-amount-input').disabled = !isCurrentPlayer;
             
             document.getElementById('set-price-label').textContent = `Set Price for Your ${playerConfig.produces}:`;
-            if(!isTurnSubmitted) document.getElementById('set-price-input').value = player.price;
+            if(isCurrentPlayer) document.getElementById('set-price-input').value = player.price;
             const outputGoodName = playerConfig.produces;
             const outputGoodStock = player.inventory[outputGoodName] || 0;
             document.getElementById('output-good-stock').textContent = `${outputGoodStock} ${outputGoodName}`;
 
             
             document.getElementById('produce-item-name').textContent = playerConfig.produces;
-            if(!isTurnSubmitted) document.getElementById('produce-amount-input').value = player.productionOrder.quantity;
+            if(isCurrentPlayer) document.getElementById('produce-amount-input').value = player.productionOrder.quantity;
             // REVERTED: 10:1 display
             let costDisplay = '1 ' + playerConfig.buys + ' per unit';
             if (localPlayerRole === 'farmer') {
@@ -1029,7 +988,7 @@
             if (playerConfig.buys) {
                 buySection.style.display = 'block';
                 document.getElementById('buy-amount-label').textContent = `Buy ${playerConfig.buys}:`;
-                if(!isTurnSubmitted) document.getElementById('buy-amount-input').value = player.buyOrder.quantity;
+                if(isCurrentPlayer) document.getElementById('buy-amount-input').value = player.buyOrder.quantity;
                 document.getElementById('buy-item-name').textContent = playerConfig.buys;
                 const supplier = gameState.players[playerConfig.input];
                 document.getElementById('supplier-price').textContent = supplier.price;
