@@ -583,7 +583,6 @@
                 [`players.${localPlayerRole}.price`]: price,
                 [`players.${localPlayerRole}.buyOrder`]: { quantity: buyAmount },
                 [`players.${localPlayerRole}.productionOrder`]: { quantity: produceAmount },
-                [`producedPlayers`]: [...(currentGameState.producedPlayers || []), localPlayerRole],
                 log: newLog
             });
 
@@ -666,8 +665,7 @@
                     transaction.update(gameRef, {
                         [`players.${aiRole}.price`]: player.price,
                         [`players.${aiRole}.buyOrder`]: player.buyOrder,
-                        [`players.${aiRole}.productionOrder`]: player.productionOrder,
-                        [`producedPlayers`]: [...(gameState.producedPlayers || []), aiRole]
+                        [`players.${aiRole}.productionOrder`]: player.productionOrder
                     });
 
                     // Process AI production immediately
@@ -743,10 +741,11 @@
                     }
 
                     // Determine next player turn
-                    const playerOrder = ['farmer', 'baker', 'sandwichMaker', 'delivery'];
-                    const currentIndex = playerOrder.indexOf(playerRole);
-                    const nextIndex = (currentIndex + 1) % playerOrder.length;
-                    const nextPlayer = playerOrder[nextIndex];
+                    const turnOrder = ['farmer', 'baker', 'sandwichMaker', 'delivery'];
+                    const currentTurnIndex = turnOrder.indexOf(playerRole);
+                    const nextTurnIndex = (currentTurnIndex + 1) % turnOrder.length;
+                    const nextPlayer = turnOrder[nextTurnIndex];
+                    const isLastPlayer = currentTurnIndex === turnOrder.length - 1;
 
                     // Handle sales for this player as buyer
                     const buyerRole = playerRole;
@@ -776,9 +775,8 @@
                         }
                     }
 
-                    // If all players have produced, process milkman and advance turn
-                    const allProduced = gameState.producedPlayers.length + 1 >= Object.keys(gameState.players).length;
-                    if (allProduced) {
+                    // Process milkman and advance turn after last player
+                    if (isLastPlayer) {
                         // Milkman Fund
                         let newMilkmanFund = gameState.milkmanFund || 0;
                         newLog.push(`Everyone paid $5 to the Milkman.`);
@@ -827,7 +825,6 @@
                         transaction.update(gameRef, {
                             players: players,
                             currentPlayerTurn: nextPlayer,
-                            producedPlayers: [...gameState.producedPlayers, playerRole],
                             log: newLog,
                             isProcessing: false
                         });
